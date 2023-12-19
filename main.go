@@ -10,6 +10,8 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
+// HTTP Handlers
+
 func getRoot(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("got / request\n")
 	io.WriteString(w, "This is my website!\n")
@@ -18,6 +20,8 @@ func getHello(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("got /hello request\n")
 	io.WriteString(w, "Hello, HTTP!\n")
 }
+
+// MQTT Handlers
 
 var messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 	fmt.Printf("Received message: %s from topic: %s\n", msg.Payload(), msg.Topic())
@@ -32,6 +36,7 @@ var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err
 }
 
 func main() {
+	// MQTT Setup
 	var broker = ""
 	var port = 1883
 	opts := mqtt.NewClientOptions()
@@ -47,6 +52,7 @@ func main() {
 		panic(token.Error())
 	}
 
+	// HTTP Setup
 	http.HandleFunc("/", getRoot)
 	http.HandleFunc("/hello", getHello)
 
