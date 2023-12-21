@@ -1,24 +1,23 @@
 package main
 
 import (
-	"capstone/server/handlers"
-	"capstone/server/utility/config"
-	"context"
+	"errors"
 	"fmt"
-	"io/ioutil"
-	"log"
+	"io"
 	"net/http"
 	"os"
-	"os/signal"
-	"strconv"
-	"syscall"
-	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/labstack/echo/v4"
 )
 
-var Counter int
+func getRoot(w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("got / request\n")
+	io.WriteString(w, "This is my website!\n")
+}
+func getHello(w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("got /hello request\n")
+	io.WriteString(w, "Hello, HTTP!\n")
+}
 
 var messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 	fmt.Printf("Received message: %s from topic: %s\n", msg.Payload(), msg.Topic())
@@ -33,9 +32,10 @@ var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err
 }
 
 func main() {
-	config.Setup()
+	var broker = ""
+	var port = 1883
 	opts := mqtt.NewClientOptions()
-	opts.AddBroker(fmt.Sprintf("tcp://%s:%d", config.GlobalConfig.MQTT_server, config.GlobalConfig.MQTT_port))
+	opts.AddBroker(fmt.Sprintf("tcp://%s:%d", broker, port))
 	opts.SetClientID("go-mqtt-client")
 	opts.SetUsername("")
 	opts.SetPassword("")
@@ -47,46 +47,15 @@ func main() {
 		panic(token.Error())
 	}
 
-	if _, err := os.Stat("failsave.txt"); os.IsNotExist(err) {
-		Counter = 0
-		file, err := os.Create("failsave.txt")
-		if err != nil {
-			log.Fatal(err)
-		}
-		file.WriteString(strconv.Itoa(Counter))
-		file.Close()
-	} else {
-		file, err := os.Open("failsave.txt")
-		if err != nil {
-			log.Fatal(err)
-		}
-		byteValue, _ := ioutil.ReadAll(file)
-		Counter, err = strconv.Atoi(string(byteValue))
-		if err != nil {
-			log.Fatal(err)
-		}
-		file.Close()
-	}
+	http.HandleFunc("/", getRoot)
+	http.HandleFunc("/hello", getHello)
 
-	//init echo
-	e := echo.New()
-	handlers.RegisterRoutes(e)
-	// Start server
-	go func() {
-		if err := e.Start(":8443"); err != nil && err != http.ErrServerClosed {
-			e.Logger.Fatal("Shutting down the server")
-		}
-	}()
-
-	// graceful shutdown
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	<-quit
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := e.Shutdown(ctx); err != nil {
-		e.Logger.Fatal(err)
+	err := http.ListenAndServe(":3333", nil)
+	if errors.Is(err, http.ErrServerClosed) {
+		fmt.Printf("server closed\n")
+	} else if err != nil {
+		fmt.Printf("error starting server: %s\n", err)
+		os.Exit(1)
 	}
 
 	client.Disconnect(250)
