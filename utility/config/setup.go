@@ -14,6 +14,7 @@ var GlobalConfig *Config
 
 func Setup() {
 	viper.SetConfigFile(".env")
+	viper.ReadInConfig()
 
 	GlobalConfig = &Config{
 		server_port: viper.GetInt("SERVER_PORT"),
