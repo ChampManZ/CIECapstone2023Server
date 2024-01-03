@@ -2,6 +2,7 @@ package main
 
 import (
 	"capstone/server/handlers"
+	"capstone/server/utility"
 	"capstone/server/utility/config"
 	"context"
 	"fmt"
@@ -32,6 +33,14 @@ var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err
 	fmt.Printf("Connect lost: %v", err)
 }
 
+var onSignal mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
+	messageString := string(msg.Payload())
+	switch messageString {
+	case "1":
+		Counter += 1
+	}
+}
+
 func main() {
 	config.Setup()
 	opts := mqtt.NewClientOptions()
@@ -47,6 +56,12 @@ func main() {
 		panic(token.Error())
 	}
 
+	token := client.Subscribe("signal", 0, onSignal)
+	token.Wait()
+
+	//get backup
+	utility.DownloadFile(config.GlobalConfig.Download_URL, "failsave_backup.txt")
+
 	if _, err := os.Stat("failsave.txt"); os.IsNotExist(err) {
 		Counter = 0
 		file, err := os.Create("failsave.txt")
@@ -56,6 +71,21 @@ func main() {
 		file.WriteString(strconv.Itoa(Counter))
 		file.Close()
 	} else {
+		//checksum
+		checksumLocal, err := utility.CalculateChecksum("failsave.txt")
+		if err != nil {
+			log.Printf("Error checksum failed: %v", err)
+		}
+
+		checksumDownloaded, err := utility.CalculateChecksum("failsave_backup.txt")
+		if err != nil {
+			log.Printf("Error checksum failed: %v", err)
+		}
+
+		if checksumLocal == checksumDownloaded {
+			fmt.Println("Checksum matched")
+		}
+
 		file, err := os.Open("failsave.txt")
 		if err != nil {
 			log.Fatal(err)

@@ -10,6 +10,7 @@ type Config struct {
 	MQTT_server   string
 	MQTT_username string
 	MQTT_password string
+	Download_URL  string
 }
 
 var GlobalConfig *Config
@@ -24,6 +25,7 @@ func Setup() {
 		MQTT_server:   viper.GetString("MQTT_SERVER"),
 		MQTT_username: viper.GetString("MQTT_USERNAME"),
 		MQTT_password: viper.GetString("MQTT_PASSWORD"),
+		Download_URL:  viper.GetString("DOWNLOAD_URL"),
 	}
 
 }
