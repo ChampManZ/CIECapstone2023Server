@@ -99,6 +99,85 @@ func queryStudentNote(studentID string) (string, error) {
 	return note, nil
 }
 
+func updateStudentNote(studentID, newNote string) error {
+	db, err := sqlx.Connect("mysql", "root:Sammax20011558_@tcp(127.0.0.1:3306)/ciecapstone2023")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	query := "UPDATE student_notes SET notes = ? WHERE studentID = ?"
+
+	_, err = db.Exec(query, newNote, studentID)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Note updated successfully for studentID: %s\n", studentID)
+	return nil
+}
+
+func updateStudentNoteHandler(c echo.Context) error {
+	studentID := c.Param("studentID")
+	newNote := c.Param("newNote")
+
+	err := updateStudentNote(studentID, newNote)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"message": "Note updated successfully"})
+}
+
+func getStudentNotesHandler(c echo.Context) error {
+	studentNoteList, err := getStudentNotes()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	// Return the joined data as JSON response
+	return c.JSON(http.StatusOK, studentNoteList)
+}
+
+func getStudentNotes() ([]StudentNote, error) {
+	csvFilePath := `D:\Thanapat Work\CIE 4th Year\Capstone Project\Server\CIECapstone2023Server\student_list\student_list.csv`
+
+	csvData, err := readStudentInfo(csvFilePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var studentNoteList []StudentNote
+
+	for studentID, student := range csvData {
+		// Query student note
+		note, err := queryStudentNote(studentID)
+		if err != nil {
+			log.Printf("Error querying student note: %v\n", err)
+			continue
+		}
+
+		joinedData := StudentNote{
+			StudentID:   student.StudentID,
+			FirstName:   student.FirstName,
+			LastName:    student.LastName,
+			Certificate: student.Certificate,
+			Note:        note,
+		}
+
+		// Append to the slice
+		studentNoteList = append(studentNoteList, joinedData)
+	}
+
+	// Print or do further processing with the joined data
+	for _, data := range studentNoteList {
+		fmt.Printf("StudentID: %s, FirstName: %s, LastName: %s, Certificate: %s, Note: %s\n",
+			data.StudentID, data.FirstName, data.LastName, data.Certificate, data.Note)
+	}
+
+	return studentNoteList, nil
+}
+
 func main() {
 	config.Setup()
 	opts := mqtt.NewClientOptions()
@@ -135,9 +214,17 @@ func main() {
 		file.Close()
 	}
 
+	// Performance Test
+	startTime := time.Now()
+
 	//init echo
 	e := echo.New()
 	handlers.RegisterRoutes(e)
+
+	// Register routes
+	e.PUT("/updateStudentNote/:studentID/:newNote", updateStudentNoteHandler)
+	e.GET("/getStudentNotes", getStudentNotesHandler)
+
 	// Start server
 	go func() {
 		if err := e.Start(":8443"); err != nil && err != http.ErrServerClosed {
@@ -145,47 +232,8 @@ func main() {
 		}
 	}()
 
-	// Read and parse CSV data
-	csvFilePath := `D:\Thanapat Work\CIE 4th Year\Capstone Project\Server\CIECapstone2023Server\student_list\student_list.csv`
-
-	csvData, err := readStudentInfo(csvFilePath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Perform the join logic and measure
-	startTime := time.Now()
-	var studentNoteList []StudentNote
-
-	for studentID, student := range csvData {
-		// Query student note
-		note, err := queryStudentNote(studentID)
-		if err != nil {
-			log.Printf("Error querying student note: %v\n", err)
-			continue
-		}
-
-		joinedData := StudentNote{
-			StudentID:   student.StudentID,
-			FirstName:   student.FirstName,
-			LastName:    student.LastName,
-			Certificate: student.Certificate,
-			Note:        note,
-		}
-
-		// Append to the slice
-		studentNoteList = append(studentNoteList, joinedData)
-	}
-
-	// Print or do further processing with the joined data
-	for _, data := range studentNoteList {
-		fmt.Printf("StudentID: %s, FirstName: %s, LastName: %s, Certificate: %s, Note: %s\n",
-			data.StudentID, data.FirstName, data.LastName, data.Certificate, data.Note)
-	}
-
-	// Print elapsed time for performance measurement
-	elapsedTime := time.Since(startTime)
-	fmt.Printf("Elapsed time: %s\n", elapsedTime)
+	elapsed := time.Since(startTime)
+	fmt.Printf("Time taken for the join operation: %s\n", elapsed)
 
 	// graceful shutdown
 	quit := make(chan os.Signal, 1)
