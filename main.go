@@ -183,6 +183,7 @@ func main() {
 			data.StudentID, data.FirstName, data.LastName, data.Certificate, data.Note)
 	}
 
+	// Print elapsed time for performance measurement
 	elapsedTime := time.Since(startTime)
 	fmt.Printf("Elapsed time: %s\n", elapsedTime)
 
