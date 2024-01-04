@@ -4,7 +4,9 @@ import (
 	"capstone/server/handlers"
 	"capstone/server/utility/config"
 	"context"
+	"encoding/csv"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -15,8 +17,25 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 )
+
+type Student struct {
+	StudentID   string
+	FirstName   string
+	LastName    string
+	Certificate string
+}
+
+type StudentNote struct {
+	StudentID   string
+	FirstName   string
+	LastName    string
+	Certificate string
+	Note        string
+}
 
 var Counter int
 
@@ -30,6 +49,54 @@ var connectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
 
 var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err error) {
 	fmt.Printf("Connect lost: %v", err)
+}
+
+func readStudentInfo(filePath string) (map[string]Student, error) {
+	studentData := make(map[string]Student)
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		student := Student{
+			StudentID:   record[0],
+			FirstName:   record[1],
+			LastName:    record[2],
+			Certificate: record[3],
+		}
+
+		studentData[student.StudentID] = student
+	}
+
+	return studentData, nil
+}
+
+func queryStudentNote(studentID string) (string, error) {
+	db, err := sqlx.Connect("mysql", "root:Sammax20011558_@tcp(127.0.0.1:3306)/ciecapstone2023")
+	if err != nil {
+		return "", err
+	}
+	defer db.Close()
+
+	var note string
+	err = db.Get(&note, "SELECT notes FROM student_notes WHERE studentID = ?", studentID)
+	if err != nil {
+		return "", err
+	}
+
+	return note, nil
 }
 
 func main() {
@@ -77,6 +144,47 @@ func main() {
 			e.Logger.Fatal("Shutting down the server")
 		}
 	}()
+
+	// Read and parse CSV data
+	csvFilePath := `D:\Thanapat Work\CIE 4th Year\Capstone Project\Server\CIECapstone2023Server\student_list\student_list.csv`
+
+	csvData, err := readStudentInfo(csvFilePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Perform the join logic and measure
+	startTime := time.Now()
+	var studentNoteList []StudentNote
+
+	for studentID, student := range csvData {
+		// Query student note
+		note, err := queryStudentNote(studentID)
+		if err != nil {
+			log.Printf("Error querying student note: %v\n", err)
+			continue
+		}
+
+		joinedData := StudentNote{
+			StudentID:   student.StudentID,
+			FirstName:   student.FirstName,
+			LastName:    student.LastName,
+			Certificate: student.Certificate,
+			Note:        note,
+		}
+
+		// Append to the slice
+		studentNoteList = append(studentNoteList, joinedData)
+	}
+
+	// Print or do further processing with the joined data
+	for _, data := range studentNoteList {
+		fmt.Printf("StudentID: %s, FirstName: %s, LastName: %s, Certificate: %s, Note: %s\n",
+			data.StudentID, data.FirstName, data.LastName, data.Certificate, data.Note)
+	}
+
+	elapsedTime := time.Since(startTime)
+	fmt.Printf("Elapsed time: %s\n", elapsedTime)
 
 	// graceful shutdown
 	quit := make(chan os.Signal, 1)
