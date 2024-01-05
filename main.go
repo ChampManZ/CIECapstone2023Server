@@ -20,24 +20,31 @@ import (
 )
 
 var Counter int
+var MicrocontrollerAlive bool = false
 
 var messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 	fmt.Printf("Received message: %s from topic: %s\n", msg.Payload(), msg.Topic())
 }
 
 var connectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
-	fmt.Println("Connected")
+	fmt.Println("Connected to MQTT Broker")
 }
 
 var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err error) {
-	fmt.Printf("Connect lost: %v", err)
+	fmt.Printf("Connection lost: %v", err)
 }
 
 var onSignal mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 	messageString := string(msg.Payload())
-	switch messageString {
-	case "1":
-		Counter += 1
+	if messageString == "1" {
+		Counter++
+	}
+}
+
+var onHealthcheck mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
+	messageString := string(msg.Payload())
+	if messageString == "ok" {
+		MicrocontrollerAlive = true
 	}
 }
 
@@ -58,34 +65,28 @@ func main() {
 
 	token := client.Subscribe("signal", 0, onSignal)
 	token.Wait()
+	token = client.Subscribe("healthcheck", 0, onHealthcheck)
+	token.Wait()
 
-	//get backup
-	utility.DownloadFile(config.GlobalConfig.Download_URL, "failsave_backup.txt")
+	client.Publish("healthcheck", 0, false, "CHK")
+	utility.CheckMicrocontrollerHealth(client, &MicrocontrollerAlive)
 
 	if _, err := os.Stat("failsave.txt"); os.IsNotExist(err) {
+		//get backup
+		err = utility.DownloadFile(config.GlobalConfig.Download_URL, "failsave.txt")
+		if err != nil {
+			log.Printf("Error downloading file: %s", err)
+
+			//recover logic
+			file, err := os.Create("failsave.txt")
+			if err != nil {
+				log.Fatal(err)
+			}
+			file.WriteString(strconv.Itoa(Counter))
+			file.Close()
+		}
 		Counter = 0
-		file, err := os.Create("failsave.txt")
-		if err != nil {
-			log.Fatal(err)
-		}
-		file.WriteString(strconv.Itoa(Counter))
-		file.Close()
 	} else {
-		//checksum
-		checksumLocal, err := utility.CalculateChecksum("failsave.txt")
-		if err != nil {
-			log.Printf("Error checksum failed: %v", err)
-		}
-
-		checksumDownloaded, err := utility.CalculateChecksum("failsave_backup.txt")
-		if err != nil {
-			log.Printf("Error checksum failed: %v", err)
-		}
-
-		if checksumLocal == checksumDownloaded {
-			fmt.Println("Checksum matched")
-		}
-
 		file, err := os.Open("failsave.txt")
 		if err != nil {
 			log.Fatal(err)
