@@ -6,7 +6,7 @@ import (
 	"capstone/server/utility/config"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -91,7 +91,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		byteValue, _ := ioutil.ReadAll(file)
+		byteValue, _ := io.ReadAll(file)
 		Counter, err = strconv.Atoi(string(byteValue))
 		if err != nil {
 			log.Fatal(err)
