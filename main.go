@@ -1,10 +1,12 @@
 package main
 
 import (
+	"capstone/server/entity"
 	"capstone/server/handlers"
 	"capstone/server/utility"
 	"capstone/server/utility/config"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -21,6 +23,7 @@ import (
 
 var Counter int
 var MicrocontrollerAlive bool = false
+var StudentList map[int]entity.Student
 
 var messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 	fmt.Printf("Received message: %s from topic: %s\n", msg.Payload(), msg.Topic())
@@ -38,6 +41,38 @@ var onSignal mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 	messageString := string(msg.Payload())
 	if messageString == "1" {
 		Counter++
+		var previous, current, next *entity.Student = nil, nil, nil
+		if prevStudent, ok := StudentList[Counter-1]; ok {
+			previous = &prevStudent
+		}
+
+		if currentStudent, ok := StudentList[Counter]; ok {
+			current = &currentStudent
+		}
+
+		if nextStudent, ok := StudentList[Counter+1]; ok {
+			next = &nextStudent
+		}
+
+		payload := entity.Payload{
+			Previous: previous,
+			Current:  current,
+			Next:     next,
+		}
+
+		jsonData, err := json.Marshal(payload)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		client.Publish("announce", 0, false, jsonData)
+
+		file, err := os.Open("failsave.txt")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+		file.WriteString(strconv.Itoa(Counter))
 	}
 }
 
