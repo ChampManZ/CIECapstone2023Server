@@ -2,7 +2,7 @@ package main
 
 import (
 	"capstone/server/handlers"
-	"capstone/server/utility/config"
+	// "capstone/server/utility/config"
 	"context"
 	"encoding/csv"
 	"fmt"
@@ -12,7 +12,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
+	"sort"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -83,6 +86,84 @@ func readStudentInfo(filePath string) (map[string]Student, error) {
 	return studentData, nil
 }
 
+func queryStudentNoteAndSaveToCSV(csvFilePath, outputFilePath string) error {
+	csvData, err := readStudentInfo(csvFilePath)
+	if err != nil {
+		return err
+	}
+
+	file, err := os.OpenFile(outputFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close() // Ensure the file is closed after writing
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	// Write CSV header
+	header := []string{"StudentID", "FirstName", "LastName", "Certificate", "Note"}
+	if err := writer.Write(header); err != nil {
+		return err
+	}
+
+	for studentID, student := range csvData {
+		note, err := queryStudentNote(studentID)
+		if err != nil {
+			log.Printf("Error querying student note: %v\n", err)
+			continue
+		}
+
+		studentNote := StudentNote{
+			StudentID:   student.StudentID,
+			FirstName:   student.FirstName,
+			LastName:    student.LastName,
+			Certificate: student.Certificate,
+			Note:        note,
+		}
+
+		// Write studentNote to CSV
+		record := []string{
+			studentNote.StudentID,
+			studentNote.FirstName,
+			studentNote.LastName,
+			studentNote.Certificate,
+			studentNote.Note,
+		}
+
+		if err := writer.Write(record); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func saveStudentNoteToCSV(studentNote StudentNote, filePath string) error {
+	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	record := []string{
+		studentNote.StudentID,
+		studentNote.FirstName,
+		studentNote.LastName,
+		studentNote.Certificate,
+		studentNote.Note,
+	}
+
+	if err := writer.Write(record); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func queryStudentNote(studentID string) (string, error) {
 	db, err := sqlx.Connect("mysql", "root:Sammax20011558_@tcp(127.0.0.1:3306)/ciecapstone2023")
 	if err != nil {
@@ -91,7 +172,7 @@ func queryStudentNote(studentID string) (string, error) {
 	defer db.Close()
 
 	var note string
-	err = db.Get(&note, "SELECT notes FROM student_notes WHERE studentID = ?", studentID)
+	err = db.Get(&note, "SELECT notes FROM student_notes_big WHERE studentID = ?", studentID)
 	if err != nil {
 		return "", err
 	}
@@ -140,7 +221,7 @@ func getStudentNotesHandler(c echo.Context) error {
 }
 
 func getStudentNotes() ([]StudentNote, error) {
-	csvFilePath := `D:\Thanapat Work\CIE 4th Year\Capstone Project\Server\CIECapstone2023Server\student_list\student_list.csv`
+	csvFilePath := `/Users/champthanapat/Documents/CIE Capstone/CIECapstone2023Server/student_list/student_list_big.csv`
 
 	csvData, err := readStudentInfo(csvFilePath)
 	if err != nil {
@@ -178,20 +259,114 @@ func getStudentNotes() ([]StudentNote, error) {
 	return studentNoteList, nil
 }
 
-func main() {
-	config.Setup()
-	opts := mqtt.NewClientOptions()
-	opts.AddBroker(fmt.Sprintf("tcp://%s:%d", config.GlobalConfig.MQTT_server, config.GlobalConfig.MQTT_port))
-	opts.SetClientID("go-mqtt-client")
-	opts.SetUsername("")
-	opts.SetPassword("")
-	opts.SetDefaultPublishHandler(messagePubHandler)
-	opts.OnConnect = connectHandler
-	opts.OnConnectionLost = connectLostHandler
-	client := mqtt.NewClient(opts)
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		panic(token.Error())
+func readCSV(filePath string) (map[int][]string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
 	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
+	resultMap := make(map[int][]string)
+	//skip header
+	for _, record := range records[1:] {
+		id, err := strconv.Atoi(record[0])
+		if err != nil {
+			return nil, err
+		}
+		resultMap[id] = record[1:]
+	}
+	return resultMap, nil
+}
+
+func joinCSVs(file1, file2 string) (map[int]StudentNote, error) {
+	data1, err := readCSV(file1)
+	if err != nil {
+		return nil, err
+	}
+
+	data2, err := readCSV(file2)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[int]StudentNote)
+	for id, values := range data1 {
+		if notes, ok := data2[id]; ok {
+
+			idStr := strconv.Itoa(id)
+
+			result[id] = StudentNote{
+				StudentID:   idStr,
+				FirstName:   values[0],
+				LastName:    values[1],
+				Certificate: values[2],
+				Note:        strings.Join(notes, ", "),
+			}
+		}
+	}
+	return result, nil
+}
+
+func saveToCSV(students map[int]StudentNote, filePath string) error {
+	file, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	// Headers, not necessary
+	header := []string{"StudentID", "FirstName", "LastName", "Certificate", "Notes"}
+	if err := writer.Write(header); err != nil {
+		return err
+	}
+
+	// Sort ID, also not necessary
+	var ids []int
+	for id := range students {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+
+	for _, id := range ids {
+		student := students[id]
+		record := []string{
+			student.StudentID,
+			student.FirstName,
+			student.LastName,
+			student.Certificate,
+			student.Note,
+		}
+		if err := writer.Write(record); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func main() {
+	// config.Setup()
+	// opts := mqtt.NewClientOptions()
+	// opts.AddBroker(fmt.Sprintf("tcp://%s:%d", config.GlobalConfig.MQTT_server, config.GlobalConfig.MQTT_port))
+	// opts.SetClientID("go-mqtt-client")
+	// opts.SetUsername("")
+	// opts.SetPassword("")
+	// opts.SetDefaultPublishHandler(messagePubHandler)
+	// opts.OnConnect = connectHandler
+	// opts.OnConnectionLost = connectLostHandler
+	// client := mqtt.NewClient(opts)
+	// if token := client.Connect(); token.Wait() && token.Error() != nil {
+	// 	panic(token.Error())
+	// }
 
 	if _, err := os.Stat("failsave.txt"); os.IsNotExist(err) {
 		Counter = 0
@@ -216,6 +391,20 @@ func main() {
 
 	// Performance Test
 	startTime := time.Now()
+	var mStart runtime.MemStats
+	runtime.ReadMemStats(&mStart)
+	csvFilePath := `/Users/champthanapat/Documents/CIE Capstone/CIECapstone2023Server/student_list/student_list_big.csv`
+	// outputFilePath := `/Users/champthanapat/Documents/CIE Capstone/CIECapstone2023Server/student_list/student_notes_big.csv`
+
+	// if err := queryStudentNoteAndSaveToCSV(csvFilePath, outputFilePath); err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	studentsTest, err := joinCSVs(csvFilePath, `/Users/champthanapat/Documents/CIE Capstone/CIECapstone2023Server/student_list/student_notes_big.csv`)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	//init echo
 	e := echo.New()
@@ -233,7 +422,16 @@ func main() {
 	}()
 
 	elapsed := time.Since(startTime)
-	fmt.Printf("Time taken for the join operation: %s\n", elapsed)
+	var mEnd runtime.MemStats
+	runtime.ReadMemStats(&mEnd)
+
+	// Calculate memory usage
+	memoryUsed := mEnd.Alloc - mStart.Alloc // bytes
+
+	//mem used
+	fmt.Printf("\nResource usages: \n")
+	fmt.Printf("Time taken: %s\n", elapsed)
+	fmt.Printf("Memory used: %.2f MB\n", float64(memoryUsed)/1024/1024)
 
 	// graceful shutdown
 	quit := make(chan os.Signal, 1)
@@ -246,5 +444,6 @@ func main() {
 		e.Logger.Fatal(err)
 	}
 
-	client.Disconnect(250)
+	saveToCSV(studentsTest, "result.csv")
+	// client.Disconnect(250)
 }
