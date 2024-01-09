@@ -39,25 +39,61 @@ var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err
 
 var onSignal mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 	messageString := string(msg.Payload())
+	log.Printf("Received message: %s from topic: %s\n", messageString, msg.Topic())
 	if messageString == "1" {
 		Counter++
+		log.Printf("Counter: %d", Counter)
 		var previous, current, next *entity.Student = nil, nil, nil
+		var prevPayload, currPayload, nextPayload *entity.IndividualPayload = nil, nil, nil
 		if prevStudent, ok := StudentList[Counter-1]; ok {
 			previous = &prevStudent
+			prevPayload = &entity.IndividualPayload{
+				Type: "student name",
+				Data: entity.StudentPayload{
+					OrderOfReading: Counter - 1,
+					Name:           previous.FirstName + " " + previous.LastName,
+					Reading:        previous.Certificate,
+					Note:           previous.Notes,
+					Certificate:    previous.Certificate,
+				},
+			}
+			log.Printf("Previous: %+v", previous)
 		}
 
 		if currentStudent, ok := StudentList[Counter]; ok {
 			current = &currentStudent
+			currPayload = &entity.IndividualPayload{
+				Type: "student name",
+				Data: entity.StudentPayload{
+					OrderOfReading: Counter,
+					Name:           current.FirstName + " " + current.LastName,
+					Reading:        current.Certificate,
+					Note:           current.Notes,
+					Certificate:    current.Certificate,
+				},
+			}
+			log.Printf("Current: %+v", current)
 		}
 
 		if nextStudent, ok := StudentList[Counter+1]; ok {
 			next = &nextStudent
+			nextPayload = &entity.IndividualPayload{
+				Type: "student name",
+				Data: entity.StudentPayload{
+					OrderOfReading: Counter + 1,
+					Name:           next.FirstName + " " + next.LastName,
+					Reading:        next.Certificate,
+					Note:           next.Notes,
+					Certificate:    next.Certificate,
+				},
+			}
+			log.Printf("Next: %+v", next)
 		}
 
 		payload := entity.Payload{
-			Previous: previous,
-			Current:  current,
-			Next:     next,
+			Previous: prevPayload,
+			Current:  currPayload,
+			Next:     nextPayload,
 		}
 
 		jsonData, err := json.Marshal(payload)
@@ -67,12 +103,10 @@ var onSignal mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 
 		client.Publish("announce", 0, false, jsonData)
 
-		file, err := os.Open("failsave.txt")
+		err = utility.WriteStringToFile("failsave.txt", strconv.Itoa(Counter))
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer file.Close()
-		file.WriteString(strconv.Itoa(Counter))
 	}
 }
 
@@ -132,6 +166,12 @@ func main() {
 			log.Fatal(err)
 		}
 		file.Close()
+	}
+
+	err := utility.ReadCSVIntoMap("result.csv", &StudentList)
+
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	//init echo

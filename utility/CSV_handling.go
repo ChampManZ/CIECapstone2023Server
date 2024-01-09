@@ -4,6 +4,7 @@ import (
 	"capstone/server/entity"
 	"encoding/csv"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strconv"
@@ -123,5 +124,49 @@ func UpdateStudentField(students map[int]entity.Student, studentID int, field, n
 	}
 
 	students[studentID] = student
+	return nil
+}
+
+func ReadCSVIntoMap(filePath string, studentsMap *map[int]entity.Student) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records := make(map[int]entity.Student)
+
+	// drop header
+	_, err = reader.Read()
+	if err != nil {
+		return err
+	}
+
+	for {
+		record, err := reader.Read()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+
+		StudentID, err := strconv.Atoi(record[0])
+		if err != nil {
+			return fmt.Errorf("failed to parse ID for %v: %v", record, err)
+		}
+
+		records[StudentID] = entity.Student{
+			StudentID:   StudentID,
+			FirstName:   record[1],
+			LastName:    record[2],
+			Certificate: record[3],
+			Notes:       record[4],
+		}
+	}
+
+	*studentsMap = records
+
 	return nil
 }

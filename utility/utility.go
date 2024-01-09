@@ -24,6 +24,22 @@ func CalculateChecksum(filePath string) (string, error) {
 	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
 }
 
+func WriteStringToFile(filePath string, content string) error {
+	file, err := os.OpenFile("failsave.txt", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+
+	defer file.Close()
+
+	_, err = file.WriteString(content)
+	if err != nil {
+		return err
+	}
+	file.Sync()
+	return nil
+}
+
 func DownloadFile(url string, filepath string) error {
 	// Get the data
 	resp, err := http.Get(url)
