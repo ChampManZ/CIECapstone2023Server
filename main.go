@@ -35,10 +35,10 @@ var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err
 func main() {
 	config.Setup()
 	opts := mqtt.NewClientOptions()
-	opts.AddBroker(fmt.Sprintf("tcp://%s:%d", config.GlobalConfig.MQTT_server, config.GlobalConfig.MQTT_port))
+	opts.AddBroker(fmt.Sprintf("tls://%s:%d", config.GlobalConfig.MQTT_server, config.GlobalConfig.MQTT_port))
 	opts.SetClientID("go-mqtt-client")
-	opts.SetUsername("")
-	opts.SetPassword("")
+	opts.SetUsername(config.GlobalConfig.MQTT_username)
+	opts.SetPassword(config.GlobalConfig.MQTT_password)
 	opts.SetDefaultPublishHandler(messagePubHandler)
 	opts.OnConnect = connectHandler
 	opts.OnConnectionLost = connectLostHandler
