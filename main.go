@@ -21,9 +21,11 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-var Counter int
-var MicrocontrollerAlive bool = false
-var StudentList map[int]entity.Student
+var MainController = handlers.Controller{
+	GlobalCounter:        0,
+	MicrocontrollerAlive: false,
+	StudentList:          make(map[int]entity.Student),
+}
 
 var messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 	fmt.Printf("Received message: %s from topic: %s\n", msg.Payload(), msg.Topic())
@@ -41,16 +43,16 @@ var onSignal mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 	messageString := string(msg.Payload())
 	log.Printf("Received message: %s from topic: %s\n", messageString, msg.Topic())
 	if messageString == "1" {
-		Counter++
-		log.Printf("Counter: %d", Counter)
+		MainController.GlobalCounter++
+		log.Printf("Counter: %d", MainController.GlobalCounter)
 		var previous, current, next *entity.Student = nil, nil, nil
 		var prevPayload, currPayload, nextPayload *entity.IndividualPayload = nil, nil, nil
-		if prevStudent, ok := StudentList[Counter-1]; ok {
+		if prevStudent, ok := MainController.StudentList[MainController.GlobalCounter-1]; ok {
 			previous = &prevStudent
 			prevPayload = &entity.IndividualPayload{
 				Type: "student name",
 				Data: entity.StudentPayload{
-					OrderOfReading: Counter - 1,
+					OrderOfReading: MainController.GlobalCounter - 1,
 					Name:           previous.FirstName + " " + previous.LastName,
 					Reading:        previous.Certificate,
 					Note:           previous.Notes,
@@ -60,12 +62,12 @@ var onSignal mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 			log.Printf("Previous: %+v", previous)
 		}
 
-		if currentStudent, ok := StudentList[Counter]; ok {
+		if currentStudent, ok := MainController.StudentList[MainController.GlobalCounter]; ok {
 			current = &currentStudent
 			currPayload = &entity.IndividualPayload{
 				Type: "student name",
 				Data: entity.StudentPayload{
-					OrderOfReading: Counter,
+					OrderOfReading: MainController.GlobalCounter,
 					Name:           current.FirstName + " " + current.LastName,
 					Reading:        current.Certificate,
 					Note:           current.Notes,
@@ -75,12 +77,12 @@ var onSignal mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 			log.Printf("Current: %+v", current)
 		}
 
-		if nextStudent, ok := StudentList[Counter+1]; ok {
+		if nextStudent, ok := MainController.StudentList[MainController.GlobalCounter+1]; ok {
 			next = &nextStudent
 			nextPayload = &entity.IndividualPayload{
 				Type: "student name",
 				Data: entity.StudentPayload{
-					OrderOfReading: Counter + 1,
+					OrderOfReading: MainController.GlobalCounter + 1,
 					Name:           next.FirstName + " " + next.LastName,
 					Reading:        next.Certificate,
 					Note:           next.Notes,
@@ -103,7 +105,7 @@ var onSignal mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 
 		client.Publish("announce", 0, false, jsonData)
 
-		err = utility.WriteStringToFile("failsave.txt", strconv.Itoa(Counter))
+		err = utility.WriteStringToFile("failsave.txt", strconv.Itoa(MainController.GlobalCounter))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -113,7 +115,7 @@ var onSignal mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 var onHealthcheck mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 	messageString := string(msg.Payload())
 	if messageString == "ok" {
-		MicrocontrollerAlive = true
+		MainController.MicrocontrollerAlive = true
 	}
 }
 
@@ -138,7 +140,7 @@ func main() {
 	token.Wait()
 
 	client.Publish("healthcheck", 0, false, "CHK")
-	utility.CheckMicrocontrollerHealth(client, &MicrocontrollerAlive)
+	utility.CheckMicrocontrollerHealth(client, &MainController.MicrocontrollerAlive)
 
 	if _, err := os.Stat("failsave.txt"); os.IsNotExist(err) {
 		//get backup
@@ -151,24 +153,24 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			file.WriteString(strconv.Itoa(Counter))
+			file.WriteString(strconv.Itoa(MainController.GlobalCounter))
 			file.Close()
 		}
-		Counter = 0
+		MainController.GlobalCounter = 0
 	} else {
 		file, err := os.Open("failsave.txt")
 		if err != nil {
 			log.Fatal(err)
 		}
 		byteValue, _ := io.ReadAll(file)
-		Counter, err = strconv.Atoi(string(byteValue))
+		MainController.GlobalCounter, err = strconv.Atoi(string(byteValue))
 		if err != nil {
 			log.Fatal(err)
 		}
 		file.Close()
 	}
 
-	err := utility.ReadCSVIntoMap("result.csv", &StudentList)
+	err := utility.ReadCSVIntoMap("result.csv", &MainController.StudentList)
 
 	if err != nil {
 		log.Fatal(err)
@@ -176,7 +178,7 @@ func main() {
 
 	//init echo
 	e := echo.New()
-	handlers.RegisterRoutes(e)
+	MainController.RegisterRoutes(e)
 	// Start server
 	go func() {
 		if err := e.Start(":8443"); err != nil && err != http.ErrServerClosed {
