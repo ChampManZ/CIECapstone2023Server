@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"capstone/server/entity"
+	"capstone/server/utility"
 
 	"github.com/labstack/echo/v4"
 )
@@ -10,6 +11,15 @@ type Controller struct {
 	GlobalCounter        int
 	MicrocontrollerAlive bool
 	StudentList          map[int]entity.Student
+	MySQLConn            *utility.MySQLDB
+}
+
+func NewController() Controller {
+	return Controller{
+		GlobalCounter:        0,
+		MicrocontrollerAlive: false,
+		StudentList:          make(map[int]entity.Student),
+	}
 }
 
 func (c Controller) Healthcheck(e echo.Context) error {

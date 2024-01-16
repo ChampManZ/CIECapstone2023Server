@@ -30,3 +30,8 @@ CREATE TABLE Student (
     Notes TEXT,
     FOREIGN KEY (CertificateID) REFERENCES Certificate(CertificateID)
 );
+
+CREATE TABLE Counter (
+    ID INT PRIMARY KEY,
+    CurrentValue INT
+);

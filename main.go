@@ -21,12 +21,9 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-var MainController = handlers.Controller{
-	GlobalCounter:        0,
-	MicrocontrollerAlive: false,
-	StudentList:          make(map[int]entity.Student),
-}
+var MainController = handlers.NewController()
 
+// TODO: move all these to mqtt/mqtt.go
 var messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 	fmt.Printf("Received message: %s from topic: %s\n", msg.Payload(), msg.Topic())
 }
@@ -105,6 +102,7 @@ var onSignal mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 
 		client.Publish("announce", 0, false, jsonData)
 
+		//TODO: replace
 		err = utility.WriteStringToFile("failsave.txt", strconv.Itoa(MainController.GlobalCounter))
 		if err != nil {
 			log.Fatal(err)
@@ -121,6 +119,7 @@ var onHealthcheck mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Messag
 
 func main() {
 	config.Setup()
+	//TODO: move all these to mqtt/mqtt.go
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(fmt.Sprintf("tls://%s:%d", config.GlobalConfig.MQTT_server, config.GlobalConfig.MQTT_port))
 	opts.SetClientID("go-mqtt-client")
@@ -142,6 +141,7 @@ func main() {
 	client.Publish("healthcheck", 0, false, "CHK")
 	utility.CheckMicrocontrollerHealth(client, &MainController.MicrocontrollerAlive)
 
+	//TO DO: Replace with MySQL
 	if _, err := os.Stat("failsave.txt"); os.IsNotExist(err) {
 		//get backup
 		err = utility.DownloadFile(config.GlobalConfig.Download_URL, "failsave.txt")
@@ -170,7 +170,16 @@ func main() {
 		file.Close()
 	}
 
-	err := utility.ReadCSVIntoMap("result.csv", &MainController.StudentList)
+	MySQL_DNS := fmt.Sprintf("mysql://%s:%s@tcp(%s:%d)/%s", config.GlobalConfig.MySQL_username,
+		config.GlobalConfig.MySQL_password, config.GlobalConfig.MySQL_host, config.GlobalConfig.MySQL_port, config.GlobalConfig.MySQL_dbname)
+	var err error
+	MainController.MySQLConn, err = utility.NewMySQLConn(MySQL_DNS)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	//TO DO: replace
+	err = utility.ReadCSVIntoMap("result.csv", &MainController.StudentList)
 
 	if err != nil {
 		log.Fatal(err)

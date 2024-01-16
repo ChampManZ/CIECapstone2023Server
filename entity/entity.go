@@ -1,5 +1,6 @@
 package entity
 
+//TO DO: refactor
 type Payload struct {
 	Previous interface{} `json:"prev"`
 	Current  interface{} `json:"curr"`
