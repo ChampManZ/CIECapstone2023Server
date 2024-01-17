@@ -21,3 +21,7 @@
 go.work
 .env
 failsave.txt
+
+# Ignore Mac system files
+.DS_Store
+../.DS_Store
