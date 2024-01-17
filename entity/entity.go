@@ -1,10 +1,15 @@
 package entity
 
-//TO DO: refactor
+// TO DO: refactor
 type AnnouncePayload struct {
 	Previous interface{} `json:"prev"`
 	Current  interface{} `json:"curr"`
 	Next     interface{} `json:"next"`
+}
+
+type CounterPayload struct {
+	Current   interface{} `json:"curr"`
+	Remaining interface{} `json:"remaining"`
 }
 
 type IndividualPayload struct {
