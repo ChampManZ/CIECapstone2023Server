@@ -95,7 +95,7 @@ func OnSignal(mc conx.Controller) mqtt.MessageHandler {
 				log.Printf("Next: %+v", next)
 			}
 
-			payload := entity.Payload{
+			payload := entity.AnnouncePayload{
 				Previous: prevPayload,
 				Current:  currPayload,
 				Next:     nextPayload,
