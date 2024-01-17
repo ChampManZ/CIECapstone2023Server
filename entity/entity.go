@@ -1,6 +1,7 @@
 package entity
 
-type Payload struct {
+//TO DO: refactor
+type AnnouncePayload struct {
 	Previous interface{} `json:"prev"`
 	Current  interface{} `json:"curr"`
 	Next     interface{} `json:"next"`
