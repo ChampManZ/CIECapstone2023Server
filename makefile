@@ -4,7 +4,7 @@ export
 .PHONY: sql setup run stop del
 
 sql:
-	docker-compose -f ${MYSQL_COMPOSE} up -d
+	docker compose -f ${MYSQL_COMPOSE} up -d
 	@echo "Waiting for MySQL to be ready..."
 	@until docker exec $(MYSQL_CONTAINER_NAME) mysql -h localhost -u$(MYSQL_USER) --password=$(MYSQL_PASSWORD) -e "SELECT 1" &> /dev/null; do \
 	    sleep 1; \
@@ -16,9 +16,9 @@ setup:
 	go mod tidy
 
 run:
-	docker-compose -f ${MYSQL_COMPOSE} up -d
+	docker compose -f ${MYSQL_COMPOSE} up -d
 	go run main.go
 stop:
-	docker-compose -f ${MYSQL_COMPOSE} down
+	docker compose -f ${MYSQL_COMPOSE} down
 del:
-	docker-compose -f ${MYSQL_COMPOSE} down -v
+	docker compose -f ${MYSQL_COMPOSE} down -v
