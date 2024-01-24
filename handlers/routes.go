@@ -3,6 +3,8 @@ package handlers
 import (
 	conx "capstone/server/controller"
 	"capstone/server/entity"
+	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 )
@@ -20,7 +22,7 @@ func NewHandlers(controller conx.Controller) handlers {
 }
 
 func (hl handlers) Healthcheck(e echo.Context) error {
-	return e.String(200, "OK")
+	return e.String(http.StatusOK, "OK")
 }
 
 func (hl handlers) Mainpage(e echo.Context) error {
@@ -46,8 +48,43 @@ func (hl handlers) AnnounceAPI(e echo.Context) error {
 	return e.JSON(200, currPayload)
 }
 
+func (hl handlers) PracticeAnnounceAPI(e echo.Context) error {
+	startParam := e.QueryParam("start")
+	amountParam := e.QueryParam("amount")
+
+	start, err := strconv.Atoi(startParam)
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid start parameter")
+	}
+
+	amount, err := strconv.Atoi(amountParam)
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid amount parameter")
+	}
+
+	var payloads []entity.IndividualPayload
+	for i := start; i < start+amount && i < len(hl.Controller.StudentList); i++ {
+		if student, ok := hl.Controller.StudentList[i]; ok {
+			payload := entity.IndividualPayload{
+				Type: "student name",
+				Data: entity.StudentPayload{
+					OrderOfReading: i,
+					Name:           student.FirstName + " " + student.LastName,
+					Reading:        student.Certificate,
+					Note:           student.Notes,
+					Certificate:    student.Certificate,
+				},
+			}
+			payloads = append(payloads, payload)
+		}
+	}
+
+	return e.JSON(http.StatusOK, payloads)
+}
+
 func (hl handlers) RegisterRoutes(e *echo.Echo) {
 	e.GET("/healthcheck", hl.Healthcheck)
 	e.GET("/", hl.Mainpage)
 	e.GET("/api/announce", hl.AnnounceAPI)
+	e.GET("/api/practice/announce", hl.PracticeAnnounceAPI)
 }
