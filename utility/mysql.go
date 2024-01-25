@@ -29,7 +29,34 @@ func (db *MySQLDB) Query(query string, args ...interface{}) (*sql.Rows, error) {
 }
 
 func (db *MySQLDB) QueryStudentsToMap() (map[int]entity.Student, error) {
-	query := `SELECT StudentID, OrderOfReceive, Firstname, Surname, Notes FROM Student`
+	query := `
+    SELECT 
+        s.StudentID,
+        s.OrderOfReceive, 
+        s.Firstname, 
+        s.Surname, 
+        CONCAT(c.Degree, ' in ', c.Major, ', ', c.Faculty, ', with honor ', 
+            CASE c.Honor 
+                WHEN 0 THEN 'none' 
+                WHEN 1 THEN 'first honor' 
+                WHEN 2 THEN 'second honor' 
+            END) AS Certificate, 
+        s.NamePronunciation,
+        c.Degree,
+        c.Faculty,
+        c.Major,
+        CASE c.Honor 
+            WHEN 0 THEN 'none' 
+            WHEN 1 THEN 'first honor' 
+            WHEN 2 THEN 'second honor' 
+        END AS Honor
+    FROM 
+        Student s
+    JOIN 
+        Certificate c ON s.CertificateID = c.CertificateID
+    ORDER BY 
+        s.OrderOfReceive ASC;
+    `
 	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
@@ -37,13 +64,24 @@ func (db *MySQLDB) QueryStudentsToMap() (map[int]entity.Student, error) {
 	defer rows.Close()
 
 	students := make(map[int]entity.Student)
+	counter := 0
 	for rows.Next() {
 		var s entity.Student
-		var order int
-		if err := rows.Scan(&s.StudentID, &order, &s.FirstName, &s.LastName, &s.Notes); err != nil {
+		if err := rows.Scan(
+			&s.StudentID,
+			&s.OrderOfReceive,
+			&s.FirstName,
+			&s.LastName,
+			&s.Certificate,
+			&s.Notes,
+			&s.Degree,
+			&s.Faculty,
+			&s.Major,
+			&s.Honor); err != nil {
 			return nil, err
 		}
-		students[order] = s
+		students[counter] = s
+		counter++
 	}
 
 	if err := rows.Err(); err != nil {

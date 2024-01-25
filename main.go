@@ -22,7 +22,7 @@ func main() {
 
 	client := mqttx.NewMqttx(config.GlobalConfig)
 	client.Publish("healthcheck", 0, false, "CHK")
-	utility.CheckMicrocontrollerHealth(client, &MainController.MicrocontrollerAlive)
+	//utility.CheckMicrocontrollerHealth(client, &MainController.MicrocontrollerAlive)
 
 	MySQL_DNS := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", config.GlobalConfig.MySQL_username,
 		config.GlobalConfig.MySQL_password, config.GlobalConfig.MySQL_host, config.GlobalConfig.MySQL_port, config.GlobalConfig.MySQL_dbname)

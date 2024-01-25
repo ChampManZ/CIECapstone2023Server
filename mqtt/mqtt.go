@@ -57,8 +57,7 @@ func OnSignal(mc conx.Controller) mqtt.MessageHandler {
 					Data: entity.StudentPayload{
 						OrderOfReading: mc.GlobalCounter - 1,
 						Name:           previous.FirstName + " " + previous.LastName,
-						Reading:        previous.Certificate,
-						Note:           previous.Notes,
+						Reading:        previous.Notes,
 						Certificate:    previous.Certificate,
 					},
 				}
@@ -72,8 +71,7 @@ func OnSignal(mc conx.Controller) mqtt.MessageHandler {
 					Data: entity.StudentPayload{
 						OrderOfReading: mc.GlobalCounter,
 						Name:           current.FirstName + " " + current.LastName,
-						Reading:        current.Certificate,
-						Note:           current.Notes,
+						Reading:        current.Notes,
 						Certificate:    current.Certificate,
 					},
 				}
@@ -87,8 +85,7 @@ func OnSignal(mc conx.Controller) mqtt.MessageHandler {
 					Data: entity.StudentPayload{
 						OrderOfReading: mc.GlobalCounter + 1,
 						Name:           next.FirstName + " " + next.LastName,
-						Reading:        next.Certificate,
-						Note:           next.Notes,
+						Reading:        next.Notes,
 						Certificate:    next.Certificate,
 					},
 				}
