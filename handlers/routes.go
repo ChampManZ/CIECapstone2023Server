@@ -40,7 +40,7 @@ func (hl handlers) AnnounceAPI(e echo.Context) error {
 			Data: entity.StudentPayload{
 				OrderOfReading: hl.Controller.GlobalCounter,
 				Name:           current.FirstName + " " + current.LastName,
-				Reading:        current.Certificate,
+				Reading:        current.Notes,
 				Certificate:    current.Certificate,
 			},
 		}

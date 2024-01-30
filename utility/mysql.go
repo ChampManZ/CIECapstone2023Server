@@ -35,20 +35,20 @@ func (db *MySQLDB) QueryStudentsToMap() (map[int]entity.Student, error) {
         s.OrderOfReceive, 
         s.Firstname, 
         s.Surname, 
-        CONCAT(c.Degree, ' in ', c.Major, ', ', c.Faculty, ', with honor ', 
+        CONCAT(c.Faculty,' ',c.Degree,'สาขาวิชา',c.Major,' ',
             CASE c.Honor 
-                WHEN 0 THEN 'none' 
-                WHEN 1 THEN 'first honor' 
-                WHEN 2 THEN 'second honor' 
+                WHEN 0 THEN '' 
+                WHEN 1 THEN 'เกียรตินิยมอันดับ 1' 
+                WHEN 2 THEN 'เกียรตินิยมอันดับ 2' 
             END) AS Certificate, 
         s.NamePronunciation,
         c.Degree,
         c.Faculty,
         c.Major,
         CASE c.Honor 
-            WHEN 0 THEN 'none' 
-            WHEN 1 THEN 'first honor' 
-            WHEN 2 THEN 'second honor' 
+            WHEN 0 THEN '' 
+            WHEN 1 THEN 'เกียรตินิยมอันดับ 1' 
+            WHEN 2 THEN 'เกียรตินิยมอันดับ 2' 
         END AS Honor
     FROM 
         Student s
