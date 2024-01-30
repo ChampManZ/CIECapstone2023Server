@@ -125,11 +125,20 @@ func (hl handlers) PracticeAnnounceAPI(e echo.Context) error {
 	return e.JSON(http.StatusOK, payloads)
 }
 
+func (hl handlers) getFacultiesAPI(e echo.Context) error {
+	faculties, err := hl.Controller.MySQLConn.QueryUniqueFaculties()
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, err.Error())
+	}
+	return e.JSON(http.StatusOK, faculties)
+}
+
 func (hl handlers) RegisterRoutes(e *echo.Echo) {
 	e.GET("/healthcheck", hl.Healthcheck)
 	e.GET("/", hl.Mainpage)
 	e.GET("/api/announce", hl.AnnounceAPI)
 	e.GET("/api/practice/announce", hl.PracticeAnnounceAPI)
+	e.GET("/api/faculties", hl.getFacultiesAPI)
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{echo.GET, echo.PUT, echo.POST, echo.DELETE},

@@ -3,6 +3,7 @@ package utility
 import (
 	"capstone/server/entity"
 	"database/sql"
+	"fmt"
 	"log"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -64,6 +65,7 @@ func (db *MySQLDB) QueryStudentsToMap() (map[int]entity.Student, error) {
 	defer rows.Close()
 
 	students := make(map[int]entity.Student)
+	var seenFaculty []string
 	counter := 0
 	for rows.Next() {
 		var s entity.Student
@@ -80,6 +82,24 @@ func (db *MySQLDB) QueryStudentsToMap() (map[int]entity.Student, error) {
 			&s.Honor); err != nil {
 			return nil, err
 		}
+		major := s.Major
+		if !IsFirstCharNotEnglish(s.Major) {
+			major = fmt.Sprintf(" " + s.Major)
+		}
+		honor := s.Honor
+		if honor != "" {
+			honor = fmt.Sprintf(" " + s.Honor)
+		}
+
+		faculty := s.Faculty
+		if IsNotInList(faculty, seenFaculty) {
+			seenFaculty = append(seenFaculty, faculty)
+			faculty = fmt.Sprintf(faculty + " ")
+		} else {
+			faculty = ""
+		}
+
+		s.Certificate = fmt.Sprintf(faculty + s.Degree + "สาขาวิชา" + major + honor)
 		students[counter] = s
 		counter++
 	}
@@ -109,4 +129,34 @@ func (db *MySQLDB) QueryCounter() int {
 		}
 	}
 	return currentValue
+}
+
+func (db *MySQLDB) QueryUniqueFaculties() ([]string, error) {
+	query := `
+    SELECT c.Faculty, s.OrderOfReceive
+    FROM Certificate c
+    JOIN Student s ON c.CertificateID = s.CertificateID
+    ORDER BY s.OrderOfReceive ASC;
+    `
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	facultyMap := make(map[string]bool)
+	var faculties []string
+	for rows.Next() {
+		var faculty string
+		var orderOfReceive int
+		if err := rows.Scan(&faculty, &orderOfReceive); err != nil {
+			return nil, err
+		}
+		if _, exists := facultyMap[faculty]; !exists {
+			faculties = append(faculties, faculty)
+			facultyMap[faculty] = true
+		}
+	}
+	return faculties, nil
 }
