@@ -7,7 +7,7 @@ services:
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: admin123
-      MYSQL_DATABASE: ciecapstone2023
+      MYSQL_DATABASE: ciecapstone2023db
     ports:
       - "3306:3306"
     volumes:
