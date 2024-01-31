@@ -151,7 +151,7 @@ func (hl handlers) updateNotes(e echo.Context) error {
 		return e.JSON(http.StatusInternalServerError, err.Error())
 	}
 
-	return e.JSON(http.StatusOK, "Note updated successfully")
+	return e.JSON(http.StatusOK, "OK")
 }
 
 func (hl handlers) getFacultiesAPI(e echo.Context) error {
