@@ -2,7 +2,7 @@ CREATE DATABASE ciecapstone2023db;
 USE ciecapstone2023db;
 
 CREATE TABLE Announcer (
-    AnnouncerID INT PRIMARY KEY,
+    AnnouncerID INT PRIMARY KEY AUTO_INCREMENT,
     AnnouncerName VARCHAR(255),
     AnnouncerPos VARCHAR(255),
     SessionOfAnnounce VARCHAR(255),
@@ -10,7 +10,7 @@ CREATE TABLE Announcer (
 );
 
 CREATE TABLE Certificate (
-    CertificateID INT PRIMARY KEY,
+    CertificateID INT PRIMARY KEY AUTO_INCREMENT,
     Degree VARCHAR(255),
     Faculty VARCHAR(255),
     Major VARCHAR(255),
