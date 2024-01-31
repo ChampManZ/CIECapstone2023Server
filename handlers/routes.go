@@ -49,6 +49,18 @@ func (hl handlers) AnnounceAPI(e echo.Context) error {
 	return e.JSON(200, currPayload)
 }
 
+func (hl handlers) CounterAPI(e echo.Context) error {
+	var currPayload entity.CounterPayload
+	if _, ok := hl.Controller.StudentList[hl.Controller.GlobalCounter]; ok {
+		currPayload = entity.CounterPayload{
+			Current:   hl.Controller.GlobalCounter,
+			Remaining: len(hl.Controller.StudentList) - hl.Controller.GlobalCounter,
+		}
+	}
+
+	return e.JSON(200, currPayload)
+}
+
 func (hl handlers) PracticeAnnounceAPI(e echo.Context) error {
 	startParam := e.QueryParam("start")
 	amountParam := e.QueryParam("amount")
@@ -137,6 +149,7 @@ func (hl handlers) RegisterRoutes(e *echo.Echo) {
 	e.GET("/healthcheck", hl.Healthcheck)
 	e.GET("/", hl.Mainpage)
 	e.GET("/api/announce", hl.AnnounceAPI)
+	e.GET("/api/counter", hl.CounterAPI)
 	e.GET("/api/practice/announce", hl.PracticeAnnounceAPI)
 	e.GET("/api/faculties", hl.getFacultiesAPI)
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{

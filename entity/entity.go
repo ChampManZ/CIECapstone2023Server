@@ -7,6 +7,11 @@ type AnnouncePayload struct {
 	Next     interface{} `json:"next"`
 }
 
+type CounterPayload struct {
+	Current   interface{} `json:"curr"`
+	Remaining interface{} `json:"remaining"`
+}
+
 type IndividualPayload struct {
 	Type string      `json:"type"`
 	Data interface{} `json:"data"`
