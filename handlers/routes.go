@@ -137,6 +137,23 @@ func (hl handlers) PracticeAnnounceAPI(e echo.Context) error {
 	return e.JSON(http.StatusOK, payloads)
 }
 
+func (hl handlers) updateNotes(e echo.Context) error {
+	orderOfReceiveParam := e.QueryParam("orderOfReceive")
+	noteParam := e.QueryParam("note")
+
+	orderOfReceive, err := strconv.Atoi(orderOfReceiveParam)
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid order of receive parameter")
+	}
+
+	err = hl.Controller.MySQLConn.UpdateNote(orderOfReceive, noteParam)
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	return e.JSON(http.StatusOK, "OK")
+}
+
 func (hl handlers) getFacultiesAPI(e echo.Context) error {
 	faculties, err := hl.Controller.MySQLConn.QueryUniqueFaculties()
 	if err != nil {
@@ -152,6 +169,7 @@ func (hl handlers) RegisterRoutes(e *echo.Echo) {
 	e.GET("/api/counter", hl.CounterAPI)
 	e.GET("/api/practice/announce", hl.PracticeAnnounceAPI)
 	e.GET("/api/faculties", hl.getFacultiesAPI)
+	e.PUT("/api/notes", hl.updateNotes)
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{echo.GET, echo.PUT, echo.POST, echo.DELETE},
