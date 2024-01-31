@@ -160,3 +160,12 @@ func (db *MySQLDB) QueryUniqueFaculties() ([]string, error) {
 	}
 	return faculties, nil
 }
+
+func (db *MySQLDB) UpdateNote(orderOfReceive int, note string) error {
+	query := `UPDATE Student SET Notes = ? WHERE OrderOfReceive = ?`
+	_, err := db.Exec(query, note, orderOfReceive)
+	if err != nil {
+		return err
+	}
+	return nil
+}
