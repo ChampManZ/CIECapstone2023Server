@@ -3,6 +3,7 @@ package utility
 import (
 	"capstone/server/entity"
 	"database/sql"
+	"fmt"
 	"log"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -29,7 +30,34 @@ func (db *MySQLDB) Query(query string, args ...interface{}) (*sql.Rows, error) {
 }
 
 func (db *MySQLDB) QueryStudentsToMap() (map[int]entity.Student, error) {
-	query := `SELECT StudentID, OrderOfReceive, Firstname, Surname, Notes FROM Student`
+	query := `
+    SELECT 
+        s.StudentID,
+        s.OrderOfReceive, 
+        s.Firstname, 
+        s.Surname, 
+        CONCAT(c.Faculty,' ',c.Degree,'สาขาวิชา',c.Major,' ',
+            CASE c.Honor 
+                WHEN 0 THEN '' 
+                WHEN 1 THEN 'เกียรตินิยมอันดับ 1' 
+                WHEN 2 THEN 'เกียรตินิยมอันดับ 2' 
+            END) AS Certificate, 
+        s.NamePronunciation,
+        c.Degree,
+        c.Faculty,
+        c.Major,
+        CASE c.Honor 
+            WHEN 0 THEN '' 
+            WHEN 1 THEN 'เกียรตินิยมอันดับ 1' 
+            WHEN 2 THEN 'เกียรตินิยมอันดับ 2' 
+        END AS Honor
+    FROM 
+        Student s
+    JOIN 
+        Certificate c ON s.CertificateID = c.CertificateID
+    ORDER BY 
+        s.OrderOfReceive ASC;
+    `
 	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
@@ -37,13 +65,43 @@ func (db *MySQLDB) QueryStudentsToMap() (map[int]entity.Student, error) {
 	defer rows.Close()
 
 	students := make(map[int]entity.Student)
+	var seenFaculty []string
+	counter := 0
 	for rows.Next() {
 		var s entity.Student
-		var order int
-		if err := rows.Scan(&s.StudentID, &order, &s.FirstName, &s.LastName, &s.Notes); err != nil {
+		if err := rows.Scan(
+			&s.StudentID,
+			&s.OrderOfReceive,
+			&s.FirstName,
+			&s.LastName,
+			&s.Certificate,
+			&s.Notes,
+			&s.Degree,
+			&s.Faculty,
+			&s.Major,
+			&s.Honor); err != nil {
 			return nil, err
 		}
-		students[order] = s
+		major := s.Major
+		if !IsFirstCharNotEnglish(s.Major) {
+			major = fmt.Sprintf(" " + s.Major)
+		}
+		honor := s.Honor
+		if honor != "" {
+			honor = fmt.Sprintf(" " + s.Honor)
+		}
+
+		faculty := s.Faculty
+		if IsNotInList(faculty, seenFaculty) {
+			seenFaculty = append(seenFaculty, faculty)
+			faculty = fmt.Sprintf(faculty + " ")
+		} else {
+			faculty = ""
+		}
+
+		s.Certificate = fmt.Sprintf(faculty + s.Degree + "สาขาวิชา" + major + honor)
+		students[counter] = s
+		counter++
 	}
 
 	if err := rows.Err(); err != nil {
@@ -71,4 +129,34 @@ func (db *MySQLDB) QueryCounter() int {
 		}
 	}
 	return currentValue
+}
+
+func (db *MySQLDB) QueryUniqueFaculties() ([]string, error) {
+	query := `
+    SELECT c.Faculty, s.OrderOfReceive
+    FROM Certificate c
+    JOIN Student s ON c.CertificateID = s.CertificateID
+    ORDER BY s.OrderOfReceive ASC;
+    `
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	facultyMap := make(map[string]bool)
+	var faculties []string
+	for rows.Next() {
+		var faculty string
+		var orderOfReceive int
+		if err := rows.Scan(&faculty, &orderOfReceive); err != nil {
+			return nil, err
+		}
+		if _, exists := facultyMap[faculty]; !exists {
+			faculties = append(faculties, faculty)
+			facultyMap[faculty] = true
+		}
+	}
+	return faculties, nil
 }

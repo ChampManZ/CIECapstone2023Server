@@ -22,11 +22,9 @@ func main() {
 
 	client := mqttx.NewMqttx(config.GlobalConfig)
 	client.Publish("healthcheck", 0, false, "CHK")
-	utility.CheckMicrocontrollerHealth(client, &MainController.MicrocontrollerAlive)
+	//utility.CheckMicrocontrollerHealth(client, &MainController.MicrocontrollerAlive)
 
-	MainController.GlobalCounter = MainController.MySQLConn.QueryCounter()
-
-	MySQL_DNS := fmt.Sprintf("mysql://%s:%s@tcp(%s:%d)/%s", config.GlobalConfig.MySQL_username,
+	MySQL_DNS := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", config.GlobalConfig.MySQL_username,
 		config.GlobalConfig.MySQL_password, config.GlobalConfig.MySQL_host, config.GlobalConfig.MySQL_port, config.GlobalConfig.MySQL_dbname)
 
 	var err error
@@ -35,6 +33,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	MainController.GlobalCounter = MainController.MySQLConn.QueryCounter()
 	MainController.StudentList, err = MainController.MySQLConn.QueryStudentsToMap()
 	if err != nil {
 		log.Fatal(err)

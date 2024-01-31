@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"unicode"
+	"unicode/utf8"
 )
 
 func CalculateChecksum(filePath string) (string, error) {
@@ -63,4 +65,22 @@ func DownloadFile(url string, filepath string) error {
 	// Write the body to file
 	_, err = io.Copy(out, resp.Body)
 	return err
+}
+
+func IsFirstCharNotEnglish(s string) bool {
+	if s == "" {
+		return false
+	}
+
+	r, _ := utf8.DecodeRuneInString(s)
+	return !unicode.IsLetter(r) || (r < 'A' || r > 'z' || (r > 'Z' && r < 'a'))
+}
+
+func IsNotInList(str string, list []string) bool {
+	for _, s := range list {
+		if s == str {
+			return false
+		}
+	}
+	return true
 }
