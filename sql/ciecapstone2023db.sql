@@ -1,4 +1,3 @@
-CREATE DATABASE ciecapstone2023db;
 USE ciecapstone2023db;
 
 CREATE TABLE Announcer (
