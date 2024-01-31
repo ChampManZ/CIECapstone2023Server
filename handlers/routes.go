@@ -143,7 +143,7 @@ func (hl handlers) updateNotes(e echo.Context) error {
 
 	orderOfReceive, err := strconv.Atoi(orderOfReceiveParam)
 	if err != nil {
-		return e.JSON(http.StatusBadRequest, "Invalid start parameter")
+		return e.JSON(http.StatusBadRequest, "Invalid order of receive parameter")
 	}
 
 	err = hl.Controller.MySQLConn.UpdateNote(orderOfReceive, noteParam)
