@@ -151,7 +151,25 @@ func (hl handlers) updateNotes(e echo.Context) error {
 		return e.JSON(http.StatusInternalServerError, err.Error())
 	}
 
+	location := findStudentByOrder(hl.Controller.StudentList, orderOfReceive)
+	if location == -1 {
+		return e.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	temp := hl.Controller.StudentList[location]
+	temp.Notes = noteParam
+
+	hl.Controller.StudentList[location] = temp
 	return e.JSON(http.StatusOK, "OK")
+}
+
+func findStudentByOrder(students map[int]entity.Student, order int) int {
+	for key, student := range students {
+		if student.OrderOfReceive == order {
+			return key
+		}
+	}
+	return -1 // Not found
 }
 
 func (hl handlers) getFacultiesAPI(e echo.Context) error {
