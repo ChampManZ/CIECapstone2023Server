@@ -1,6 +1,5 @@
 package entity
 
-// TO DO: refactor
 type AnnouncePayload struct {
 	Previous interface{} `json:"prev"`
 	Current  interface{} `json:"curr"`
@@ -35,4 +34,24 @@ type Student struct {
 	Faculty        string
 	Major          string
 	Honor          string
+}
+
+type Announcer struct {
+	AnnouncerID     int
+	AnnouncerScript string
+	Start           int
+	End             int
+}
+
+// Student Data Struct from Query
+type StudentData struct {
+	ReceiveOrder string `json:"receive_order"`
+	StudentID    string `json:"student_id"`
+	Name         string `json:"name"`
+	Surname      string `json:"surname"`
+	NameRead     string `json:"name_read"`
+	FacultyName  string `json:"faculty_name"`
+	CurrName     string `json:"curr_name"`
+	CerName      string `json:"cer_name"`
+	Honor        string `json:"honor"`
 }

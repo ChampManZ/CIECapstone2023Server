@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strconv"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -29,34 +30,102 @@ func (db *MySQLDB) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	return db.DB.Query(query, args...)
 }
 
+func (db *MySQLDB) UpdateStudentList(jsonData []entity.StudentData) error {
+	for _, student := range jsonData {
+		studentID, err := strconv.Atoi(student.StudentID)
+		if err != nil {
+			return err
+		}
+		receiveOrder, err := strconv.Atoi(student.ReceiveOrder)
+		if err != nil {
+			return err
+		}
+
+		// Certificate
+		certID, err := db.uinsertCertificate(student.CerName, student.FacultyName, student.CurrName, student.Honor)
+		if err != nil {
+			return err
+		}
+
+		// Student
+		err = db.uinsertStudent(studentID, receiveOrder, student.Name, student.Surname, student.NameRead, int(certID))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (db *MySQLDB) uinsertCertificate(degree, faculty, major, honor string) (int64, error) {
+	var certID int64
+	// Check if exists
+	query := `SELECT CertificateID FROM Certificate WHERE Degree = ? AND Faculty = ? AND Major = ? AND Honor = ?`
+	err := db.QueryRow(query, degree, faculty, major, honor).Scan(&certID)
+	if err == sql.ErrNoRows {
+		// Insert if not exists
+		insertQuery := `INSERT INTO Certificate(Degree, Faculty, Major, Honor) VALUES(?, ?, ?, ?)`
+		res, err := db.Exec(insertQuery, degree, faculty, major, honor)
+		if err != nil {
+			return 0, err
+		}
+		return res.LastInsertId()
+	} else if err != nil {
+		return 0, err
+	}
+	// Return existing if found
+	return certID, nil
+}
+
+func (db *MySQLDB) uinsertStudent(studentID, orderOfReceive int, firstname, surname, nameRead string, certificateID int) error {
+	// Check exists
+	var id int
+	query := `SELECT StudentID FROM Student WHERE StudentID = ?`
+	err := db.QueryRow(query, studentID).Scan(&id)
+	if err == sql.ErrNoRows {
+		// Insert if not exist
+		insertQuery := `INSERT INTO Student(StudentID, OrderOfReceive, Firstname, Surname, NamePronunciation, CertificateID) VALUES(?, ?, ?, ?, ?, ?)`
+		_, err := db.Exec(insertQuery, studentID, orderOfReceive, firstname, surname, nameRead, certificateID)
+		return err
+	} else if err != nil {
+		return err
+	} else {
+		// Update if found
+		updateQuery := `UPDATE Student SET OrderOfReceive = ?, Firstname = ?, Surname = ?, NamePronunciation = ?, CertificateID = ? WHERE StudentID = ?`
+		_, err := db.Exec(updateQuery, orderOfReceive, firstname, surname, nameRead, certificateID, studentID)
+		return err
+	}
+}
+
 func (db *MySQLDB) QueryStudentsToMap() (map[int]entity.Student, error) {
 	query := `
-    SELECT 
-        s.StudentID,
-        s.OrderOfReceive, 
-        s.Firstname, 
-        s.Surname, 
-        CONCAT(c.Faculty,' ',c.Degree,'สาขาวิชา',c.Major,' ',
-            CASE c.Honor 
-                WHEN 0 THEN '' 
-                WHEN 1 THEN 'เกียรตินิยมอันดับ 1' 
-                WHEN 2 THEN 'เกียรตินิยมอันดับ 2' 
-            END) AS Certificate, 
-        s.NamePronunciation,
-        c.Degree,
-        c.Faculty,
-        c.Major,
-        CASE c.Honor 
-            WHEN 0 THEN '' 
-            WHEN 1 THEN 'เกียรตินิยมอันดับ 1' 
-            WHEN 2 THEN 'เกียรตินิยมอันดับ 2' 
-        END AS Honor
-    FROM 
-        Student s
-    JOIN 
-        Certificate c ON s.CertificateID = c.CertificateID
-    ORDER BY 
-        s.OrderOfReceive ASC;
+	SELECT 
+		s.StudentID,
+		s.OrderOfReceive, 
+		s.Firstname, 
+		s.Surname, 
+		CONCAT(c.Faculty, ' ', c.Degree, 'สาขาวิชา', c.Major, ' ',
+			CASE c.Honor 
+				WHEN 0 THEN '' 
+				WHEN 1 THEN 'เกียรตินิยมอันดับ 1' 
+				WHEN 2 THEN 'เกียรตินิยมอันดับ 2' 
+			END) AS Certificate, 
+		COALESCE(nr.SavedNameRead, s.NamePronunciation) AS NameRead,
+		c.Degree,
+		c.Faculty,
+		c.Major,
+		CASE c.Honor 
+			WHEN 0 THEN '' 
+			WHEN 1 THEN 'เกียรตินิยมอันดับ 1' 
+			WHEN 2 THEN 'เกียรตินิยมอันดับ 2' 
+		END AS Honor
+	FROM 
+		Student s
+	JOIN 
+		Certificate c ON s.CertificateID = c.CertificateID
+	LEFT JOIN 
+		NameRead nr ON nr.NameReadStudentID = s.StudentID
+	ORDER BY 
+		s.OrderOfReceive ASC;
     `
 	rows, err := db.Query(query)
 	if err != nil {
@@ -161,11 +230,29 @@ func (db *MySQLDB) QueryUniqueFaculties() ([]string, error) {
 	return faculties, nil
 }
 
-func (db *MySQLDB) UpdateNote(orderOfReceive int, note string) error {
-	query := `UPDATE Student SET NamePronunciation = ? WHERE OrderOfReceive = ?`
-	_, err := db.Exec(query, note, orderOfReceive)
+func (db *MySQLDB) UpdateAnnouncerQuery(announcerID int, announcerScript string) error {
+
+	query := `UPDATE Announcer SET AnnouncerScript = ? WHERE AnnouncerID = ?`
+	_, err := db.Exec(query, announcerScript, announcerID)
 	if err != nil {
 		return err
 	}
+	return nil
+
+}
+
+func (db *MySQLDB) UpdateNote(orderOfReceive int, note string) error {
+	var studentID int
+	findIDQuery := `SELECT StudentID FROM Student WHERE OrderOfReceive = ?`
+	err := db.QueryRow(findIDQuery, orderOfReceive).Scan(&studentID)
+	if err != nil {
+		return err
+	}
+	updateQuery := `UPDATE NameRead SET SavedNameRead = ? WHERE NameReadStudentID = ?`
+	_, err = db.Exec(updateQuery, note, studentID)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

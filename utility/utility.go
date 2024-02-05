@@ -3,8 +3,10 @@ package utility
 import (
 	"capstone/server/entity"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -66,6 +68,27 @@ func DownloadFile(url string, filepath string) error {
 	// Write the body to file
 	_, err = io.Copy(out, resp.Body)
 	return err
+}
+
+func FetchRegistraData(url string) ([]entity.StudentData, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var data []entity.StudentData
+	err = json.Unmarshal(body, &data)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
 }
 
 func IsFirstCharNotEnglish(s string) bool {

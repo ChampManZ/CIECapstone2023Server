@@ -4,6 +4,7 @@ import (
 	conx "capstone/server/controller"
 	"capstone/server/entity"
 	"capstone/server/utility"
+	"capstone/server/utility/config"
 	"net/http"
 	"sort"
 	"strconv"
@@ -172,6 +173,42 @@ func (hl handlers) GetFacultiesAPI(e echo.Context) error {
 	return e.JSON(http.StatusOK, faculties)
 }
 
+func (hl handlers) UpdateStudentList(e echo.Context) error {
+	studentData, err := utility.FetchRegistraData(config.GlobalConfig.Download_URL)
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, err.Error())
+	}
+	err = hl.Controller.MySQLConn.UpdateStudentList(studentData)
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	hl.Controller.StudentList, err = hl.Controller.MySQLConn.QueryStudentsToMap()
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	return e.JSON(http.StatusOK, "OK")
+
+}
+
+func (hl handlers) UpdateAnnouncer(e echo.Context) error {
+	announcerIDParam := e.QueryParam("announcerID")
+	announcerScript := e.QueryParam("announcerScript")
+
+	announcerID, err := strconv.Atoi(announcerIDParam)
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid announcerID parameter")
+	}
+
+	err = hl.Controller.MySQLConn.UpdateAnnouncerQuery(announcerID, announcerScript)
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	return e.String(http.StatusOK, "OK")
+}
+
 func (hl handlers) RegisterRoutes(e *echo.Echo) {
 	e.GET("/healthcheck", hl.Healthcheck)
 	e.GET("/", hl.Mainpage)
@@ -180,6 +217,7 @@ func (hl handlers) RegisterRoutes(e *echo.Echo) {
 	e.GET("/api/practice/announce", hl.PracticeAnnounceAPI)
 	e.GET("/api/faculties", hl.GetFacultiesAPI)
 	e.PUT("/api/notes", hl.UpdateNotes)
+	e.PUT("/api/students-list", hl.UpdateStudentList)
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{echo.GET, echo.PUT, echo.POST, echo.DELETE},

@@ -9,6 +9,7 @@ type Controller struct {
 	GlobalCounter        int
 	MicrocontrollerAlive bool
 	StudentList          map[int]entity.Student
+	AnnouncerList        map[int]entity.Announcer
 	MySQLConn            *utility.MySQLDB
 }
 
@@ -17,6 +18,7 @@ func NewController() Controller {
 		GlobalCounter:        0,
 		MicrocontrollerAlive: false,
 		StudentList:          make(map[int]entity.Student),
+		AnnouncerList:        make(map[int]entity.Announcer),
 	}
 }
 
