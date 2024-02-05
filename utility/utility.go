@@ -1,6 +1,7 @@
 package utility
 
 import (
+	"capstone/server/entity"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -83,4 +84,13 @@ func IsNotInList(str string, list []string) bool {
 		}
 	}
 	return true
+}
+
+func FindStudentByOrder(students map[int]entity.Student, order int) int {
+	for key, student := range students {
+		if student.OrderOfReceive == order {
+			return key
+		}
+	}
+	return -1 // Not found
 }
