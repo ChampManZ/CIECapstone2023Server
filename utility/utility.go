@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"reflect"
 	"unicode"
 	"unicode/utf8"
 )
@@ -70,20 +70,79 @@ func DownloadFile(url string, filepath string) error {
 	return err
 }
 
+// workaround bcz reg is a piece of shit
+func convertAndUnmarshal(data []byte) ([]entity.StudentData, error) {
+	var intermediate interface{}
+	err := json.Unmarshal(data, &intermediate)
+	if err != nil {
+		return nil, err
+	}
+
+	if reflect.TypeOf(intermediate).Kind() == reflect.Slice {
+		slice, ok := intermediate.([]interface{})
+		if !ok {
+			return nil, fmt.Errorf("type assertion to slice of interface{} failed")
+		}
+		var modifiedSlice []map[string]interface{}
+
+		for _, item := range slice {
+			itemMap, ok := item.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("type assertion to map[string]interface{} failed")
+			}
+			modifiedMap := make(map[string]interface{})
+			for key, value := range itemMap {
+				switch v := value.(type) {
+				case float64:
+					modifiedMap[key] = fmt.Sprintf("%v", v)
+				case bool:
+					modifiedMap[key] = fmt.Sprintf("%t", v)
+				default:
+					modifiedMap[key] = fmt.Sprintf("%s", v)
+				}
+			}
+			modifiedSlice = append(modifiedSlice, modifiedMap)
+		}
+
+		modifiedData, err := json.Marshal(modifiedSlice)
+		if err != nil {
+			return nil, err
+		}
+
+		var students []entity.StudentData
+		err = json.Unmarshal(modifiedData, &students)
+		if err != nil {
+			return nil, err
+		}
+
+		return students, nil
+	}
+
+	return nil, fmt.Errorf("expected JSON array at the top level")
+}
+
 func FetchRegistraData(url string) ([]entity.StudentData, error) {
-	resp, err := http.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
 	var data []entity.StudentData
-	err = json.Unmarshal(body, &data)
+	//err = json.Unmarshal(body, &data)
+	data, err = convertAndUnmarshal(body)
 	if err != nil {
 		return nil, err
 	}

@@ -110,6 +110,7 @@ func (db *MySQLDB) QueryStudentsToMap() (map[int]entity.Student, error) {
 				WHEN 2 THEN 'เกียรตินิยมอันดับ 2' 
 			END) AS Certificate, 
 		COALESCE(nr.SavedNameRead, s.NamePronunciation) AS NameRead,
+		s.NamePronunciation,
 		c.Degree,
 		c.Faculty,
 		c.Major,
@@ -144,7 +145,8 @@ func (db *MySQLDB) QueryStudentsToMap() (map[int]entity.Student, error) {
 			&s.FirstName,
 			&s.LastName,
 			&s.Certificate,
-			&s.Notes,
+			&s.Reading,
+			&s.RegReading,
 			&s.Degree,
 			&s.Faculty,
 			&s.Major,
@@ -230,15 +232,17 @@ func (db *MySQLDB) QueryUniqueFaculties() ([]string, error) {
 	return faculties, nil
 }
 
-func (db *MySQLDB) UpdateAnnouncerQuery(announcerID int, announcerScript string) error {
+func (db *MySQLDB) UpdateAnnouncerQuery(announcerID int, announcerName, announcerScript, sessionOfAnnounce string, firstOrder, lastOrder int) error {
+	query := `UPDATE Announcer 
+	          SET AnnouncerName = ?, AnnouncerScript = ?, SessionOfAnnounce = ?, FirstOrder = ?, LastOrder = ?
+	          WHERE AnnouncerID = ?`
 
-	query := `UPDATE Announcer SET AnnouncerScript = ? WHERE AnnouncerID = ?`
-	_, err := db.Exec(query, announcerScript, announcerID)
+	_, err := db.Exec(query, announcerName, announcerScript, sessionOfAnnounce, firstOrder, lastOrder, announcerID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to update announcer: %w", err)
 	}
-	return nil
 
+	return nil
 }
 
 func (db *MySQLDB) UpdateNote(orderOfReceive int, note string) error {
@@ -248,11 +252,70 @@ func (db *MySQLDB) UpdateNote(orderOfReceive int, note string) error {
 	if err != nil {
 		return err
 	}
-	updateQuery := `UPDATE NameRead SET SavedNameRead = ? WHERE NameReadStudentID = ?`
-	_, err = db.Exec(updateQuery, note, studentID)
+
+	var exists bool
+	checkExistenceQuery := `SELECT EXISTS(SELECT 1 FROM NameRead WHERE NameReadStudentID = ?)`
+	err = db.QueryRow(checkExistenceQuery, studentID).Scan(&exists)
 	if err != nil {
 		return err
 	}
 
+	if exists {
+		updateQuery := `UPDATE NameRead SET SavedNameRead = ? WHERE NameReadStudentID = ?`
+		_, err = db.Exec(updateQuery, note, studentID)
+		if err != nil {
+			return err
+		}
+	} else {
+		insertQuery := `INSERT INTO NameRead (NameReadStudentID, SavedNameRead) VALUES (?, ?)`
+		_, err = db.Exec(insertQuery, studentID, note)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (db *MySQLDB) QueryAnnouncers() (map[int]entity.Announcer, error) {
+	query := `SELECT AnnouncerID, AnnouncerName, AnnouncerScript, SessionOfAnnounce, FirstOrder, LastOrder FROM Announcer`
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("querying announcers: %w", err)
+	}
+	defer rows.Close()
+
+	announcers := make(map[int]entity.Announcer)
+
+	for rows.Next() {
+		var a entity.Announcer
+		if err := rows.Scan(&a.AnnouncerID, &a.AnnouncerName, &a.AnnouncerScript, &a.Session, &a.Start, &a.End); err != nil {
+			return nil, fmt.Errorf("scanning announcer: %w", err)
+		}
+		announcers[a.AnnouncerID] = a
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating over announcers: %w", err)
+	}
+
+	return announcers, nil
+}
+
+func (db *MySQLDB) InsertAnnouncer(announcerName, announcerScript, SessionOfAnnounce string, firstOrder, lastOrder int) error {
+	query := `INSERT INTO Announcer (AnnouncerName, AnnouncerScript, SessionOfAnnounce, FirstOrder, LastOrder) VALUES (?, ?, ?, ?, ?)`
+	_, err := db.Exec(query, announcerName, announcerScript, SessionOfAnnounce, firstOrder, lastOrder)
+	if err != nil {
+		return err
+	}
+	return nil
+
+}
+
+func (db *MySQLDB) DeleteAnnouncer(announcerID int) error {
+	query := `DELETE FROM Announcer WHERE AnnouncerID = ?`
+	_, err := db.Exec(query, announcerID)
+	if err != nil {
+		return err
+	}
 	return nil
 }

@@ -5,22 +5,24 @@ import (
 	"capstone/server/entity"
 	"capstone/server/utility"
 	"capstone/server/utility/config"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
 
 type handlers struct {
-	Controller conx.Controller
+	Controller *conx.Controller
 	Echo       *echo.Echo
 }
 
 func NewHandlers(controller conx.Controller) handlers {
 	return handlers{
-		Controller: controller,
+		Controller: &controller,
 		Echo:       echo.New(),
 	}
 }
@@ -30,7 +32,7 @@ func (hl handlers) Healthcheck(e echo.Context) error {
 }
 
 func (hl handlers) Mainpage(e echo.Context) error {
-	return e.File("html/index.html")
+	return e.File("html/main/index.html")
 }
 
 func (hl handlers) AnnounceAPI(e echo.Context) error {
@@ -42,7 +44,7 @@ func (hl handlers) AnnounceAPI(e echo.Context) error {
 			Data: entity.StudentPayload{
 				OrderOfReading: hl.Controller.GlobalCounter,
 				Name:           current.FirstName + " " + current.LastName,
-				Reading:        current.Notes,
+				Reading:        current.Reading,
 				Certificate:    current.Certificate,
 			},
 		}
@@ -99,6 +101,14 @@ func (hl handlers) PracticeAnnounceAPI(e echo.Context) error {
 
 	var previousStudent *entity.Student
 	var payloads []entity.IndividualPayload
+	announcers := hl.Controller.AnnouncerList
+	var seenAnnouncers []int
+	// if start-1 > 0 {
+	// 	val, ok := sortedStudents[start-1].(entity.Student)
+	// 	if ok {
+	// 		previousStudent = &val
+	// 	}
+	// }
 
 	for i, student := range sortedStudents {
 
@@ -108,17 +118,100 @@ func (hl handlers) PracticeAnnounceAPI(e echo.Context) error {
 				continue
 			}
 			student := student.(entity.Student)
+
+			announcerScript := ""
+			announcerID := 0
+			seen := false
+			diff := false
+
+			for _, announcer := range announcers {
+				announcerID = announcer.AnnouncerID
+				for _, item := range seenAnnouncers {
+					if item == announcer.AnnouncerID {
+						seen = true
+					}
+				}
+				if !seen && student.OrderOfReceive == announcer.Start && student.OrderOfReceive <= announcer.End {
+					announcerScript = announcer.AnnouncerScript
+					seenAnnouncers = append(seenAnnouncers, announcer.AnnouncerID)
+					break
+				}
+			}
+
 			var certificateValue string
 			if previousStudent != nil {
-				if student.Major != previousStudent.Major ||
-					student.Degree != previousStudent.Degree ||
-					student.Honor != previousStudent.Honor {
-					certificateValue = student.Certificate
+				degree := student.Degree
+				if utility.IsFirstCharNotEnglish(degree) {
+					degree = fmt.Sprintf("ปริญญา" + strings.TrimSpace(degree))
 				} else {
+					degree = fmt.Sprintf("ปริญญา " + strings.TrimSpace(degree))
+				}
+				if student.Degree != previousStudent.Degree {
+					diff = true
+					//certificateValue = fmt.Sprintf(certificateValue + strings.TrimSpace(degree))
+					announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(degree))
+				}
+				major := student.Major
+				if utility.IsFirstCharNotEnglish(major) {
+					major = fmt.Sprintf("สาขาวิชา" + strings.TrimSpace(major))
+				} else {
+					major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
+				}
+				if student.Major != previousStudent.Major {
+					diff = true
+					//certificateValue = fmt.Sprintf(certificateValue + " " + strings.TrimSpace(major))
+					announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(major))
+				}
+				if student.Honor != previousStudent.Honor {
+					if previousStudent.Honor != "เกียรตินิยมอันดับ 2" {
+						certificateValue = fmt.Sprintf(certificateValue + " " + student.Honor)
+					} else {
+						certificateValue = fmt.Sprintf(certificateValue + " " + strings.TrimSpace(major))
+					}
+				}
+				if !(student.Major != previousStudent.Major ||
+					student.Degree != previousStudent.Degree ||
+					student.Honor != previousStudent.Honor) {
 					certificateValue = ""
 				}
+				// if student.Major != previousStudent.Major ||
+				// 	student.Degree != previousStudent.Degree ||
+				// 	student.Honor != previousStudent.Honor {
+				// 	certificateValue = student.Certificate
+				// } else {
+				// 	certificateValue = ""
+				// }
 			} else {
-				certificateValue = student.Certificate // First student case
+				degree := student.Degree
+				if utility.IsFirstCharNotEnglish(degree) {
+					degree = fmt.Sprintf("ปริญญา" + strings.TrimSpace(degree))
+				} else {
+					degree = fmt.Sprintf("ปริญญา " + strings.TrimSpace(degree))
+				}
+				major := student.Major
+				if utility.IsFirstCharNotEnglish(major) {
+					major = fmt.Sprintf("สาขาวิชา" + strings.TrimSpace(major))
+				} else {
+					major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
+				}
+				//certificateValue = fmt.Sprintf(certificateValue + strings.TrimSpace(degree))
+				//certificateValue = fmt.Sprintf(certificateValue + " " + strings.TrimSpace(major))
+				certificateValue = fmt.Sprintf(certificateValue + " " + strings.TrimSpace(student.Honor))
+				announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(degree))
+				announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(major))
+			}
+
+			certificateValue = strings.TrimSpace(certificateValue)
+			announcerScript = strings.TrimSpace(announcerScript)
+			if announcerScript != "" || diff {
+				payload := entity.IndividualPayload{
+					Type: "script",
+					Data: entity.AnnouncerPayload{
+						AnnouncerID: announcerID,
+						Script:      announcerScript,
+					},
+				}
+				payloads = append(payloads, payload)
 			}
 
 			payload := entity.IndividualPayload{
@@ -126,7 +219,8 @@ func (hl handlers) PracticeAnnounceAPI(e echo.Context) error {
 				Data: entity.StudentPayload{
 					OrderOfReading: student.OrderOfReceive,
 					Name:           student.FirstName + " " + student.LastName,
-					Reading:        student.Notes,
+					Reading:        student.Reading,
+					RegReading:     student.RegReading,
 					Certificate:    certificateValue,
 				},
 			}
@@ -159,7 +253,7 @@ func (hl handlers) UpdateNotes(e echo.Context) error {
 	}
 
 	temp := hl.Controller.StudentList[location]
-	temp.Notes = noteParam
+	temp.Reading = noteParam
 
 	hl.Controller.StudentList[location] = temp
 	return e.JSON(http.StatusOK, "OK")
@@ -194,19 +288,98 @@ func (hl handlers) UpdateStudentList(e echo.Context) error {
 
 func (hl handlers) UpdateAnnouncer(e echo.Context) error {
 	announcerIDParam := e.QueryParam("announcerID")
-	announcerScript := e.QueryParam("announcerScript")
+	announcerName := e.QueryParam("AnnouncerName")
+	announcerScript := e.QueryParam("AnnouncerScript")
+	SessionOfAnnounce := e.QueryParam("SessionOfAnnounce")
+	firstOrderStr := e.QueryParam("FirstOrder")
+	lastOrderStr := e.QueryParam("LastOrder")
+
+	firstOrder, err := strconv.Atoi(firstOrderStr)
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid FirstOrder")
+	}
+
+	lastOrder, err := strconv.Atoi(lastOrderStr)
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid LastOrder")
+	}
 
 	announcerID, err := strconv.Atoi(announcerIDParam)
 	if err != nil {
 		return e.JSON(http.StatusBadRequest, "Invalid announcerID parameter")
 	}
 
-	err = hl.Controller.MySQLConn.UpdateAnnouncerQuery(announcerID, announcerScript)
+	err = hl.Controller.MySQLConn.UpdateAnnouncerQuery(announcerID, announcerName, announcerScript, SessionOfAnnounce, firstOrder, lastOrder)
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	hl.Controller.AnnouncerList, err = hl.Controller.MySQLConn.QueryAnnouncers()
 	if err != nil {
 		return e.JSON(http.StatusInternalServerError, err.Error())
 	}
 
 	return e.String(http.StatusOK, "OK")
+}
+
+func (hl handlers) InsertAnnouncer(e echo.Context) error {
+	announcerName := e.QueryParam("AnnouncerName")
+	announcerScript := e.QueryParam("AnnouncerScript")
+	SessionOfAnnounce := e.QueryParam("SessionOfAnnounce")
+	firstOrderStr := e.QueryParam("FirstOrder")
+	lastOrderStr := e.QueryParam("LastOrder")
+
+	firstOrder, err := strconv.Atoi(firstOrderStr)
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid FirstOrder")
+	}
+
+	lastOrder, err := strconv.Atoi(lastOrderStr)
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid LastOrder")
+	}
+
+	err = hl.Controller.MySQLConn.InsertAnnouncer(announcerName, announcerScript, SessionOfAnnounce, firstOrder, lastOrder)
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	hl.Controller.AnnouncerList, err = hl.Controller.MySQLConn.QueryAnnouncers()
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	return e.JSON(http.StatusOK, "OK")
+}
+
+func (hl handlers) GetAnnouncers(e echo.Context) error {
+	announcersMap := hl.Controller.AnnouncerList
+	var announcersSlice []entity.Announcer
+	for _, announcer := range announcersMap {
+		announcersSlice = append(announcersSlice, announcer)
+	}
+	return e.JSON(http.StatusOK, announcersSlice)
+}
+
+func (hl handlers) DeleteAnnouncer(e echo.Context) error {
+	announcerIDParam := e.QueryParam("AnnouncerID")
+
+	announcerID, err := strconv.Atoi(announcerIDParam)
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid announcerID")
+	}
+
+	err = hl.Controller.MySQLConn.DeleteAnnouncer(announcerID)
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	hl.Controller.AnnouncerList, err = hl.Controller.MySQLConn.QueryAnnouncers()
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	return e.JSON(http.StatusOK, "OK")
 }
 
 func (hl handlers) RegisterRoutes(e *echo.Echo) {
@@ -218,6 +391,11 @@ func (hl handlers) RegisterRoutes(e *echo.Echo) {
 	e.GET("/api/faculties", hl.GetFacultiesAPI)
 	e.PUT("/api/notes", hl.UpdateNotes)
 	e.PUT("/api/students-list", hl.UpdateStudentList)
+	e.POST("/api/insert-announcer", hl.InsertAnnouncer)
+	e.PUT("/api/update-announcer", hl.UpdateAnnouncer)
+	e.GET("/api/announcers", hl.GetAnnouncers)
+	e.DELETE("/api/delete-announcer", hl.DeleteAnnouncer)
+	e.Static("/assets", "html/main/assets")
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{echo.GET, echo.PUT, echo.POST, echo.DELETE},

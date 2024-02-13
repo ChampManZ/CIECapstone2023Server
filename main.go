@@ -39,6 +39,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	MainController.AnnouncerList, err = MainController.MySQLConn.QueryAnnouncers()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	//init echo
 	hl := handlers.NewHandlers(MainController)
 	hl.RegisterRoutes(hl.Echo)
