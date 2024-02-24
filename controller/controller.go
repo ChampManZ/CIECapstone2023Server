@@ -11,6 +11,8 @@ type Controller struct {
 	StudentList          map[int]entity.Student
 	AnnouncerList        map[int]entity.Announcer
 	MySQLConn            *utility.MySQLDB
+	Script               []entity.IndividualPayload
+	Mode                 string
 }
 
 func NewController() Controller {
@@ -19,6 +21,7 @@ func NewController() Controller {
 		MicrocontrollerAlive: false,
 		StudentList:          make(map[int]entity.Student),
 		AnnouncerList:        make(map[int]entity.Announcer),
+		Mode:                 "sensor",
 	}
 }
 

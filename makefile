@@ -22,3 +22,5 @@ stop:
 	docker compose -f ${MYSQL_COMPOSE} down
 del:
 	docker compose -f ${MYSQL_COMPOSE} down -v
+build:
+	GOOS=linux GOARCH=amd64 go build -o capstone

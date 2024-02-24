@@ -32,7 +32,7 @@ func (hl handlers) Healthcheck(e echo.Context) error {
 }
 
 func (hl handlers) Mainpage(e echo.Context) error {
-	return e.File("html/main/index.html")
+	return e.File("html/dist/index.html")
 }
 
 func (hl handlers) AnnounceAPI(e echo.Context) error {
@@ -103,12 +103,6 @@ func (hl handlers) PracticeAnnounceAPI(e echo.Context) error {
 	var payloads []entity.IndividualPayload
 	announcers := hl.Controller.AnnouncerList
 	var seenAnnouncers []int
-	// if start-1 > 0 {
-	// 	val, ok := sortedStudents[start-1].(entity.Student)
-	// 	if ok {
-	// 		previousStudent = &val
-	// 	}
-	// }
 
 	for i, student := range sortedStudents {
 
@@ -259,12 +253,55 @@ func (hl handlers) UpdateNotes(e echo.Context) error {
 	return e.JSON(http.StatusOK, "OK")
 }
 
-func (hl handlers) GetFacultiesAPI(e echo.Context) error {
+func (hl handlers) UpdateScript(c echo.Context) error {
+	var sortedStudents []interface{}
+	// First padding
+	sortedStudents = append(sortedStudents, nil)
+
+	studentsSlice := make([]entity.Student, 0, len(hl.Controller.StudentList))
+	for _, student := range hl.Controller.StudentList {
+		studentsSlice = append(studentsSlice, student)
+	}
+
+	sort.SliceStable(studentsSlice, func(i, j int) bool {
+		return studentsSlice[i].OrderOfReceive < studentsSlice[j].OrderOfReceive
+	})
+
+	var currentFaculty string
+	for i, student := range studentsSlice {
+		sortedStudents = append(sortedStudents, student)
+
+		if i > 0 && student.Faculty != currentFaculty {
+			sortedStudents = append(sortedStudents, nil)
+		}
+		currentFaculty = student.Faculty
+
+		if i < len(studentsSlice)-1 && studentsSlice[i+1].Faculty != currentFaculty {
+			sortedStudents = append(sortedStudents, nil)
+		}
+	}
+
+	// Last padding
+	sortedStudents = append(sortedStudents, nil)
+	return c.JSON(http.StatusOK, sortedStudents)
+
+}
+
+func (hl handlers) GetFacultiesAPI(c echo.Context) error {
 	faculties, err := hl.Controller.MySQLConn.QueryUniqueFaculties()
 	if err != nil {
-		return e.JSON(http.StatusInternalServerError, err.Error())
+		return c.JSON(http.StatusInternalServerError, err)
 	}
-	return e.JSON(http.StatusOK, faculties)
+
+	groupedFaculties := entity.FacultySessionPayload{}
+	for _, faculty := range faculties {
+		if faculty.SessionOfAnnounce == "เช้า" {
+			groupedFaculties.Morning = append(groupedFaculties.Morning, faculty.Faculty)
+		} else if faculty.SessionOfAnnounce == "บ่าย" {
+			groupedFaculties.Afternoon = append(groupedFaculties.Afternoon, faculty.Faculty)
+		}
+	}
+	return c.JSON(http.StatusOK, groupedFaculties)
 }
 
 func (hl handlers) UpdateStudentList(e echo.Context) error {
@@ -287,31 +324,27 @@ func (hl handlers) UpdateStudentList(e echo.Context) error {
 }
 
 func (hl handlers) UpdateAnnouncer(e echo.Context) error {
-	announcerIDParam := e.QueryParam("announcerID")
-	announcerName := e.QueryParam("AnnouncerName")
-	announcerScript := e.QueryParam("AnnouncerScript")
-	SessionOfAnnounce := e.QueryParam("SessionOfAnnounce")
-	firstOrderStr := e.QueryParam("FirstOrder")
-	lastOrderStr := e.QueryParam("LastOrder")
-
-	firstOrder, err := strconv.Atoi(firstOrderStr)
-	if err != nil {
-		return e.JSON(http.StatusBadRequest, "Invalid FirstOrder")
+	var updateRequests []entity.Announcer
+	if err := e.Bind(&updateRequests); err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid request format")
 	}
 
-	lastOrder, err := strconv.Atoi(lastOrderStr)
+	// transaction for safety due to batching update
+	tx, err := hl.Controller.MySQLConn.Begin()
 	if err != nil {
-		return e.JSON(http.StatusBadRequest, "Invalid LastOrder")
+		return e.JSON(http.StatusInternalServerError, "Failed to start transaction")
+	}
+	defer tx.Rollback()
+
+	for _, updateRequest := range updateRequests {
+		err = hl.Controller.MySQLConn.UpdateAnnouncerQuery(tx, updateRequest.AnnouncerID, updateRequest.AnnouncerName, updateRequest.AnnouncerScript, updateRequest.Session, updateRequest.Start, updateRequest.End)
+		if err != nil {
+			return e.JSON(http.StatusInternalServerError, err.Error())
+		}
 	}
 
-	announcerID, err := strconv.Atoi(announcerIDParam)
-	if err != nil {
-		return e.JSON(http.StatusBadRequest, "Invalid announcerID parameter")
-	}
-
-	err = hl.Controller.MySQLConn.UpdateAnnouncerQuery(announcerID, announcerName, announcerScript, SessionOfAnnounce, firstOrder, lastOrder)
-	if err != nil {
-		return e.JSON(http.StatusInternalServerError, err.Error())
+	if err := tx.Commit(); err != nil {
+		return e.JSON(http.StatusInternalServerError, "Failed to commit transaction")
 	}
 
 	hl.Controller.AnnouncerList, err = hl.Controller.MySQLConn.QueryAnnouncers()
@@ -319,29 +352,31 @@ func (hl handlers) UpdateAnnouncer(e echo.Context) error {
 		return e.JSON(http.StatusInternalServerError, err.Error())
 	}
 
-	return e.String(http.StatusOK, "OK")
+	return e.JSON(http.StatusOK, "OK")
 }
 
 func (hl handlers) InsertAnnouncer(e echo.Context) error {
-	announcerName := e.QueryParam("AnnouncerName")
-	announcerScript := e.QueryParam("AnnouncerScript")
-	SessionOfAnnounce := e.QueryParam("SessionOfAnnounce")
-	firstOrderStr := e.QueryParam("FirstOrder")
-	lastOrderStr := e.QueryParam("LastOrder")
-
-	firstOrder, err := strconv.Atoi(firstOrderStr)
-	if err != nil {
-		return e.JSON(http.StatusBadRequest, "Invalid FirstOrder")
+	var insertRequests []entity.Announcer
+	if err := e.Bind(&insertRequests); err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid request format")
 	}
 
-	lastOrder, err := strconv.Atoi(lastOrderStr)
+	// Start a transaction
+	tx, err := hl.Controller.MySQLConn.Begin()
 	if err != nil {
-		return e.JSON(http.StatusBadRequest, "Invalid LastOrder")
+		return e.JSON(http.StatusInternalServerError, "Failed to start transaction")
+	}
+	defer tx.Rollback()
+
+	for _, insertRequest := range insertRequests {
+		err = hl.Controller.MySQLConn.InsertAnnouncer(tx, insertRequest.AnnouncerName, insertRequest.AnnouncerScript, insertRequest.Session, insertRequest.Start, insertRequest.End)
+		if err != nil {
+			return e.JSON(http.StatusInternalServerError, fmt.Sprintf("Failed to insert announcer: %v", err))
+		}
 	}
 
-	err = hl.Controller.MySQLConn.InsertAnnouncer(announcerName, announcerScript, SessionOfAnnounce, firstOrder, lastOrder)
-	if err != nil {
-		return e.JSON(http.StatusInternalServerError, err.Error())
+	if err := tx.Commit(); err != nil {
+		return e.JSON(http.StatusInternalServerError, "Failed to commit transaction")
 	}
 
 	hl.Controller.AnnouncerList, err = hl.Controller.MySQLConn.QueryAnnouncers()
@@ -362,16 +397,27 @@ func (hl handlers) GetAnnouncers(e echo.Context) error {
 }
 
 func (hl handlers) DeleteAnnouncer(e echo.Context) error {
-	announcerIDParam := e.QueryParam("AnnouncerID")
-
-	announcerID, err := strconv.Atoi(announcerIDParam)
-	if err != nil {
-		return e.JSON(http.StatusBadRequest, "Invalid announcerID")
+	var announcerIDs []int
+	if err := e.Bind(&announcerIDs); err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid request format")
 	}
 
-	err = hl.Controller.MySQLConn.DeleteAnnouncer(announcerID)
+	// transaction
+	tx, err := hl.Controller.MySQLConn.Begin()
 	if err != nil {
-		return e.JSON(http.StatusInternalServerError, err.Error())
+		return e.JSON(http.StatusInternalServerError, "Failed to start transaction")
+	}
+	defer tx.Rollback()
+
+	for _, announcerID := range announcerIDs {
+		err = hl.Controller.MySQLConn.DeleteAnnouncer(tx, announcerID)
+		if err != nil {
+			return e.JSON(http.StatusInternalServerError, fmt.Sprintf("Failed to delete announcer: %v", err))
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return e.JSON(http.StatusInternalServerError, "Failed to commit transaction")
 	}
 
 	hl.Controller.AnnouncerList, err = hl.Controller.MySQLConn.QueryAnnouncers()
@@ -382,9 +428,60 @@ func (hl handlers) DeleteAnnouncer(e echo.Context) error {
 	return e.JSON(http.StatusOK, "OK")
 }
 
+func (hl handlers) DashboardAPI(e echo.Context) error {
+	student, ok := hl.Controller.StudentList[hl.Controller.GlobalCounter]
+	if !ok {
+		payload := entity.DashboardPayload{}
+		return e.JSON(http.StatusOK, payload)
+	}
+	Name := fmt.Sprintf(student.FirstName + " " + student.LastName)
+	nextStudent := hl.Controller.StudentList[hl.Controller.GlobalCounter+10000]
+	NextName := fmt.Sprintf(nextStudent.FirstName + " " + nextStudent.LastName)
+	payload := entity.DashboardPayload{
+		Name:            Name,
+		StudentID:       student.StudentID,
+		Faculty:         student.Faculty,
+		Major:           student.Major,
+		NextStudentName: strings.TrimSpace(NextName),
+		Counter:         hl.Controller.GlobalCounter,
+		Remaining:       len(hl.Controller.StudentList) - hl.Controller.GlobalCounter,
+	}
+
+	return e.JSON(http.StatusOK, payload)
+}
+
+func (hl handlers) IncrementCounter(e echo.Context) error {
+	if hl.Controller.Mode != "sensor" {
+		return e.JSON(http.StatusBadRequest, "Current Mode is not sensor")
+	}
+	hl.Controller.GlobalCounter += 1
+	return e.JSON(http.StatusOK, "OK")
+}
+
+func (hl handlers) DecrementCounter(e echo.Context) error {
+	if hl.Controller.Mode != "sensor" {
+		return e.JSON(http.StatusBadRequest, "Current Mode is not sensor")
+	}
+	if hl.Controller.GlobalCounter <= 0 {
+		return e.JSON(http.StatusBadRequest, "Counter cannot be less than zero")
+	}
+	hl.Controller.GlobalCounter -= 1
+	return e.JSON(http.StatusOK, "OK")
+}
+
+func (hl handlers) SwitchMode(e echo.Context) error {
+	mode := hl.Controller.Mode
+	if mode == "auto" {
+		mode = "sensor"
+	} else {
+		mode = "auto"
+	}
+	return e.JSON(http.StatusOK, mode)
+}
+
 func (hl handlers) RegisterRoutes(e *echo.Echo) {
 	e.GET("/healthcheck", hl.Healthcheck)
-	e.GET("/", hl.Mainpage)
+	e.GET("/*", hl.Mainpage)
 	e.GET("/api/announce", hl.AnnounceAPI)
 	e.GET("/api/counter", hl.CounterAPI)
 	e.GET("/api/practice/announce", hl.PracticeAnnounceAPI)
@@ -394,8 +491,13 @@ func (hl handlers) RegisterRoutes(e *echo.Echo) {
 	e.POST("/api/insert-announcer", hl.InsertAnnouncer)
 	e.PUT("/api/update-announcer", hl.UpdateAnnouncer)
 	e.GET("/api/announcers", hl.GetAnnouncers)
+	e.GET("/test", hl.UpdateScript)
+	e.GET("/api/dashboard", hl.DashboardAPI)
 	e.DELETE("/api/delete-announcer", hl.DeleteAnnouncer)
-	e.Static("/assets", "html/main/assets")
+	e.GET("/api/incrementCounter", hl.IncrementCounter)
+	e.GET("/api/decrementCounter", hl.DecrementCounter)
+	e.GET("/api/switchMode", hl.SwitchMode)
+	e.Static("/assets", "html/dist/assets")
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{echo.GET, echo.PUT, echo.POST, echo.DELETE},

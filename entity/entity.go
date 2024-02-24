@@ -39,12 +39,12 @@ type Student struct {
 }
 
 type Announcer struct {
-	AnnouncerID     int
-	AnnouncerName   string
-	AnnouncerScript string
-	Session         string
-	Start           int
-	End             int
+	AnnouncerID     int    `json:"AnnouncerID"`
+	AnnouncerName   string `json:"AnnouncerName"`
+	AnnouncerScript string `json:"AnnouncerScript"`
+	Session         string `json:"SessionOfAnnounce"`
+	Start           int    `json:"FirstOrder"`
+	End             int    `json:"LastOrder"`
 }
 
 type AnnouncerPayload struct {
@@ -63,4 +63,24 @@ type StudentData struct {
 	CurrName     string `json:"curr_name"`
 	CerName      string `json:"cer_name"`
 	Honor        string `json:"honor"`
+}
+
+type FacultySession struct {
+	Faculty           string `json:"faculty"`
+	SessionOfAnnounce string `json:"session"`
+}
+
+type DashboardPayload struct {
+	Name            string `json:"name"`
+	StudentID       int    `json:"studentID"`
+	Faculty         string `json:"faculty"`
+	Major           string `json:"major"`
+	Counter         int    `json:"order"`
+	Remaining       int    `json:"remain"`
+	NextStudentName string `json:"nextName"`
+}
+
+type FacultySessionPayload struct {
+	Morning   []string `json:"morning"`
+	Afternoon []string `json:"afternoon"`
 }

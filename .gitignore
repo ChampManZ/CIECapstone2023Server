@@ -27,4 +27,4 @@ failsave.txt
 ../.DS_Store
 
 # html files
-/html/main
+/html/dist

@@ -202,42 +202,75 @@ func (db *MySQLDB) QueryCounter() int {
 	return currentValue
 }
 
-func (db *MySQLDB) QueryUniqueFaculties() ([]string, error) {
-	query := `
-    SELECT c.Faculty, s.OrderOfReceive
-    FROM Certificate c
-    JOIN Student s ON c.CertificateID = s.CertificateID
-    ORDER BY s.OrderOfReceive ASC;
-    `
+func (db *MySQLDB) QueryUniqueFaculties() ([]entity.FacultySession, error) {
+	// Check for the presence of any afternoon session first
+	var firstOrderAfternoon int
+	var afternoonFaculty string
+	err := db.QueryRow(`
+        SELECT MIN(FirstOrder)
+        FROM Announcer a
+        WHERE a.SessionOfAnnounce = 'บ่าย'
+        GROUP BY a.AnnouncerID
+        ORDER BY MIN(FirstOrder) ASC
+        LIMIT 1`).Scan(&firstOrderAfternoon)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
 
-	rows, err := db.Query(query)
+	err = db.QueryRow(`
+	SELECT c.Faculty
+	FROM Certificate c
+	JOIN Student s ON c.CertificateID = s.CertificateID
+	WHERE s.OrderOfReceive = ?
+	LIMIT 1`, firstOrderAfternoon).Scan(&afternoonFaculty)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	//afternoonExists := err == nil
+	rows, err := db.Query(`
+        SELECT c.Faculty
+        FROM Certificate c
+        JOIN Student s ON c.CertificateID = s.CertificateID
+        ORDER BY s.OrderOfReceive ASC`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	facultyMap := make(map[string]bool)
-	var faculties []string
+	facultyMap := make(map[string]string)
+	var faculties []entity.FacultySession
+	sessionAssigned := false
+
 	for rows.Next() {
 		var faculty string
-		var orderOfReceive int
-		if err := rows.Scan(&faculty, &orderOfReceive); err != nil {
+		if err := rows.Scan(&faculty); err != nil {
 			return nil, err
 		}
 		if _, exists := facultyMap[faculty]; !exists {
-			faculties = append(faculties, faculty)
-			facultyMap[faculty] = true
+			session := "เช้า"
+			if faculty == afternoonFaculty || sessionAssigned {
+				session = "บ่าย"
+				sessionAssigned = true
+			}
+			facultyMap[faculty] = session
+			faculties = append(faculties, entity.FacultySession{Faculty: faculty, SessionOfAnnounce: session})
 		}
 	}
+
+	// //safety check
+	// if !afternoonExists && !sessionAssigned {
+	// 	for i := range faculties {
+	// 		faculties[i].SessionOfAnnounce = "เช้า"
+	// 	}
+	// }
+
 	return faculties, nil
 }
 
-func (db *MySQLDB) UpdateAnnouncerQuery(announcerID int, announcerName, announcerScript, sessionOfAnnounce string, firstOrder, lastOrder int) error {
-	query := `UPDATE Announcer 
-	          SET AnnouncerName = ?, AnnouncerScript = ?, SessionOfAnnounce = ?, FirstOrder = ?, LastOrder = ?
-	          WHERE AnnouncerID = ?`
-
-	_, err := db.Exec(query, announcerName, announcerScript, sessionOfAnnounce, firstOrder, lastOrder, announcerID)
+// Transaction included
+func (db *MySQLDB) UpdateAnnouncerQuery(tx *sql.Tx, announcerID int, announcerName, announcerScript, sessionOfAnnounce string, firstOrder, lastOrder int) error {
+	query := `UPDATE Announcer SET AnnouncerName = ?, AnnouncerScript = ?, SessionOfAnnounce = ?, FirstOrder = ?, LastOrder = ? WHERE AnnouncerID = ?`
+	_, err := tx.Exec(query, announcerName, announcerScript, sessionOfAnnounce, firstOrder, lastOrder, announcerID)
 	if err != nil {
 		return fmt.Errorf("failed to update announcer: %w", err)
 	}
@@ -301,21 +334,31 @@ func (db *MySQLDB) QueryAnnouncers() (map[int]entity.Announcer, error) {
 	return announcers, nil
 }
 
-func (db *MySQLDB) InsertAnnouncer(announcerName, announcerScript, SessionOfAnnounce string, firstOrder, lastOrder int) error {
+// Transaction included
+func (db *MySQLDB) InsertAnnouncer(tx *sql.Tx, announcerName, announcerScript, sessionOfAnnounce string, firstOrder, lastOrder int) error {
+	var first, last sql.NullInt64
+	first.Int64 = int64(firstOrder)
+	last.Int64 = int64(lastOrder)
+	if first.Int64 == 0 {
+		first.Valid = false
+	}
+	if last.Int64 == 0 {
+		last.Valid = false
+	}
 	query := `INSERT INTO Announcer (AnnouncerName, AnnouncerScript, SessionOfAnnounce, FirstOrder, LastOrder) VALUES (?, ?, ?, ?, ?)`
-	_, err := db.Exec(query, announcerName, announcerScript, SessionOfAnnounce, firstOrder, lastOrder)
+	_, err := tx.Exec(query, announcerName, announcerScript, sessionOfAnnounce, firstOrder, lastOrder)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to insert announcer: %w", err)
 	}
 	return nil
-
 }
 
-func (db *MySQLDB) DeleteAnnouncer(announcerID int) error {
+// Transaction included
+func (db *MySQLDB) DeleteAnnouncer(tx *sql.Tx, announcerID int) error {
 	query := `DELETE FROM Announcer WHERE AnnouncerID = ?`
-	_, err := db.Exec(query, announcerID)
+	_, err := tx.Exec(query, announcerID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to delete announcer: %w", err)
 	}
 	return nil
 }
