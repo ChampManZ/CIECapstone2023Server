@@ -496,7 +496,7 @@ func (hl handlers) RegisterRoutes(e *echo.Echo) {
 	e.POST("/api/insert-announcer", hl.InsertAnnouncer)
 	e.PUT("/api/update-announcer", hl.UpdateAnnouncer)
 	e.GET("/api/announcers", hl.GetAnnouncers)
-	e.GET("/test", hl.UpdateScript)
+	e.GET("/test", hl.TestscriptAPI)
 	e.GET("/api/dashboard", hl.DashboardAPI)
 	e.DELETE("/api/delete-announcer", hl.DeleteAnnouncer)
 	e.GET("/api/incrementCounter", hl.IncrementCounter)
