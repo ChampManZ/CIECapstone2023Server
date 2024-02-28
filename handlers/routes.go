@@ -472,11 +472,11 @@ func (hl handlers) DecrementCounter(e echo.Context) error {
 func (hl handlers) SwitchMode(e echo.Context) error {
 	mode := hl.Controller.Mode
 	if mode == "auto" {
-		mode = "sensor"
+		hl.Controller.Mode = "sensor"
 	} else {
-		mode = "auto"
+		hl.Controller.Mode = "auto"
 	}
-	return e.JSON(http.StatusOK, mode)
+	return e.JSON(http.StatusOK, hl.Controller.Mode)
 }
 
 func (hl handlers) RegisterRoutes(e *echo.Echo) {
