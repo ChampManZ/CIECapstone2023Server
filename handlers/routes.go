@@ -287,6 +287,11 @@ func (hl handlers) UpdateScript(c echo.Context) error {
 
 }
 
+func (hl handlers) TestscriptAPI(c echo.Context) error {
+	hl.Controller.GenerateSript()
+	return c.JSON(http.StatusOK, hl.Controller.Script)
+}
+
 func (hl handlers) GetFacultiesAPI(c echo.Context) error {
 	faculties, err := hl.Controller.MySQLConn.QueryUniqueFaculties()
 	if err != nil {
