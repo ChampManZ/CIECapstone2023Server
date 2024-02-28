@@ -7,7 +7,6 @@ import (
 	"capstone/server/utility/config"
 	"fmt"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -69,6 +68,7 @@ func (hl handlers) PracticeAnnounceAPI(e echo.Context) error {
 	startParam := e.QueryParam("start")
 	amountParam := e.QueryParam("amount")
 	facultyParam := e.QueryParam("faculty")
+	var payloads []interface{}
 
 	start, err := strconv.Atoi(startParam)
 	if err != nil {
@@ -80,147 +80,44 @@ func (hl handlers) PracticeAnnounceAPI(e echo.Context) error {
 		return e.JSON(http.StatusBadRequest, "Invalid amount parameter")
 	}
 
-	var sortedStudents []interface{}
-	sortedStudents = append(sortedStudents, nil)
-	for _, student := range hl.Controller.StudentList {
-		if student.Faculty != facultyParam {
-			continue
-		}
-		sortedStudents = append(sortedStudents, student)
-	}
+	var found bool
+	var filtered_script []entity.IndividualPayload
 
-	sort.SliceStable(sortedStudents, func(i, j int) bool {
-		if sortedStudents[i] == nil || sortedStudents[j] == nil {
-			return false
-		}
-		studentI := sortedStudents[i].(entity.Student)
-		studentJ := sortedStudents[j].(entity.Student)
-		return studentI.OrderOfReceive < studentJ.OrderOfReceive
-	})
-	sortedStudents = append(sortedStudents, nil)
-
-	var previousStudent *entity.Student
-	var payloads []entity.IndividualPayload
-	announcers := hl.Controller.AnnouncerList
-	var seenAnnouncers []int
-
-	for i, student := range sortedStudents {
-
-		if i >= start && i < start+amount {
-			if student == nil {
-				payloads = append(payloads, entity.IndividualPayload{})
-				continue
+	//append to front
+	filtered_script = append(filtered_script, entity.IndividualPayload{})
+	for _, payload := range hl.Controller.Script {
+		if payload.Type == "student name" {
+			if payload.Data.(entity.StudentPayload).Faculty == facultyParam {
+				filtered_script = append(filtered_script, payload)
+				found = true
 			}
-			student := student.(entity.Student)
-
-			announcerScript := ""
-			announcerID := 0
-			seen := false
-			diff := false
-
-			for _, announcer := range announcers {
-				announcerID = announcer.AnnouncerID
-				for _, item := range seenAnnouncers {
-					if item == announcer.AnnouncerID {
-						seen = true
-					}
-				}
-				if !seen && student.OrderOfReceive == announcer.Start && student.OrderOfReceive <= announcer.End {
-					announcerScript = announcer.AnnouncerScript
-					seenAnnouncers = append(seenAnnouncers, announcer.AnnouncerID)
+		}
+		if payload.Type == "script" {
+			if payload.Data.(entity.AnnouncerPayload).Faculty == facultyParam {
+				filtered_script = append(filtered_script, payload)
+				found = true
+			}
+		}
+		if found {
+			if payload.Type == "student name" {
+				if payload.Data.(entity.StudentPayload).Faculty != facultyParam {
 					break
 				}
 			}
-
-			var certificateValue string
-			if previousStudent != nil {
-				degree := student.Degree
-				if utility.IsFirstCharNotEnglish(degree) {
-					degree = fmt.Sprintf("ปริญญา" + strings.TrimSpace(degree))
-				} else {
-					degree = fmt.Sprintf("ปริญญา " + strings.TrimSpace(degree))
+			if payload.Type == "script" {
+				if payload.Data.(entity.AnnouncerPayload).Faculty != facultyParam {
+					break
 				}
-				if student.Degree != previousStudent.Degree {
-					diff = true
-					//certificateValue = fmt.Sprintf(certificateValue + strings.TrimSpace(degree))
-					announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(degree))
-				}
-				major := student.Major
-				if utility.IsFirstCharNotEnglish(major) {
-					major = fmt.Sprintf("สาขาวิชา" + strings.TrimSpace(major))
-				} else {
-					major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
-				}
-				if student.Major != previousStudent.Major {
-					diff = true
-					//certificateValue = fmt.Sprintf(certificateValue + " " + strings.TrimSpace(major))
-					announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(major))
-				}
-				if student.Honor != previousStudent.Honor {
-					if previousStudent.Honor != "เกียรตินิยมอันดับ 2" {
-						certificateValue = fmt.Sprintf(certificateValue + " " + student.Honor)
-					} else {
-						certificateValue = fmt.Sprintf(certificateValue + " " + strings.TrimSpace(major))
-					}
-				}
-				if !(student.Major != previousStudent.Major ||
-					student.Degree != previousStudent.Degree ||
-					student.Honor != previousStudent.Honor) {
-					certificateValue = ""
-				}
-				// if student.Major != previousStudent.Major ||
-				// 	student.Degree != previousStudent.Degree ||
-				// 	student.Honor != previousStudent.Honor {
-				// 	certificateValue = student.Certificate
-				// } else {
-				// 	certificateValue = ""
-				// }
-			} else {
-				degree := student.Degree
-				if utility.IsFirstCharNotEnglish(degree) {
-					degree = fmt.Sprintf("ปริญญา" + strings.TrimSpace(degree))
-				} else {
-					degree = fmt.Sprintf("ปริญญา " + strings.TrimSpace(degree))
-				}
-				major := student.Major
-				if utility.IsFirstCharNotEnglish(major) {
-					major = fmt.Sprintf("สาขาวิชา" + strings.TrimSpace(major))
-				} else {
-					major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
-				}
-				//certificateValue = fmt.Sprintf(certificateValue + strings.TrimSpace(degree))
-				//certificateValue = fmt.Sprintf(certificateValue + " " + strings.TrimSpace(major))
-				certificateValue = fmt.Sprintf(certificateValue + " " + strings.TrimSpace(student.Honor))
-				announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(degree))
-				announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(major))
 			}
+		}
+	}
 
-			certificateValue = strings.TrimSpace(certificateValue)
-			announcerScript = strings.TrimSpace(announcerScript)
-			if announcerScript != "" || diff {
-				payload := entity.IndividualPayload{
-					Type: "script",
-					Data: entity.AnnouncerPayload{
-						AnnouncerID: announcerID,
-						Script:      announcerScript,
-					},
-				}
-				payloads = append(payloads, payload)
-			}
+	//append to back
+	filtered_script = append(filtered_script, entity.IndividualPayload{})
 
-			payload := entity.IndividualPayload{
-				Type: "student name",
-				Data: entity.StudentPayload{
-					OrderOfReading: student.OrderOfReceive,
-					Name:           student.FirstName + " " + student.LastName,
-					Reading:        student.Reading,
-					RegReading:     student.RegReading,
-					Certificate:    certificateValue,
-				},
-			}
+	for i, payload := range filtered_script {
+		if i >= start && i < start+amount {
 			payloads = append(payloads, payload)
-			prev := student
-			previousStudent = &prev
 		}
 	}
 
@@ -250,46 +147,13 @@ func (hl handlers) UpdateNotes(e echo.Context) error {
 	temp.Reading = noteParam
 
 	hl.Controller.StudentList[location] = temp
+	hl.Controller.GenerateSript()
 	return e.JSON(http.StatusOK, "OK")
 }
 
-func (hl handlers) UpdateScript(c echo.Context) error {
-	var sortedStudents []interface{}
-	// First padding
-	sortedStudents = append(sortedStudents, nil)
-
-	studentsSlice := make([]entity.Student, 0, len(hl.Controller.StudentList))
-	for _, student := range hl.Controller.StudentList {
-		studentsSlice = append(studentsSlice, student)
-	}
-
-	sort.SliceStable(studentsSlice, func(i, j int) bool {
-		return studentsSlice[i].OrderOfReceive < studentsSlice[j].OrderOfReceive
-	})
-
-	var currentFaculty string
-	for i, student := range studentsSlice {
-		sortedStudents = append(sortedStudents, student)
-
-		if i > 0 && student.Faculty != currentFaculty {
-			sortedStudents = append(sortedStudents, nil)
-		}
-		currentFaculty = student.Faculty
-
-		if i < len(studentsSlice)-1 && studentsSlice[i+1].Faculty != currentFaculty {
-			sortedStudents = append(sortedStudents, nil)
-		}
-	}
-
-	// Last padding
-	sortedStudents = append(sortedStudents, nil)
-	return c.JSON(http.StatusOK, sortedStudents)
-
-}
-
-func (hl handlers) TestscriptAPI(c echo.Context) error {
+func (hl handlers) TestscriptAPI(e echo.Context) error {
 	hl.Controller.GenerateSript()
-	return c.JSON(http.StatusOK, hl.Controller.Script)
+	return e.JSON(http.StatusOK, hl.Controller.Script)
 }
 
 func (hl handlers) GetFacultiesAPI(c echo.Context) error {
@@ -323,7 +187,7 @@ func (hl handlers) UpdateStudentList(e echo.Context) error {
 	if err != nil {
 		return e.JSON(http.StatusInternalServerError, err.Error())
 	}
-
+	hl.Controller.GenerateSript()
 	return e.JSON(http.StatusOK, "OK")
 
 }
@@ -356,7 +220,7 @@ func (hl handlers) UpdateAnnouncer(e echo.Context) error {
 	if err != nil {
 		return e.JSON(http.StatusInternalServerError, err.Error())
 	}
-
+	hl.Controller.GenerateSript()
 	return e.JSON(http.StatusOK, "OK")
 }
 
@@ -388,7 +252,7 @@ func (hl handlers) InsertAnnouncer(e echo.Context) error {
 	if err != nil {
 		return e.JSON(http.StatusInternalServerError, err.Error())
 	}
-
+	hl.Controller.GenerateSript()
 	return e.JSON(http.StatusOK, "OK")
 }
 

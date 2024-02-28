@@ -56,26 +56,30 @@ func (c *Controller) GenerateSript() error {
 	for i, k := range keys {
 		sortedStudents[i] = students[k]
 	}
-
+	var previousStudent entity.Student
 	//loop through sorted list and construct script
 	for i, student := range sortedStudents {
-		var announcerID int
-		var announcerScript string
-		var certificateValue string
-		var previousStudent entity.Student
-		seen := false
+		var announcerID int = 0
+		var announcerScript string = ""
+		var certificateValue string = ""
 		//check announcers
 		for _, announcer := range announcers {
-			announcerID = announcer.AnnouncerID
-			for _, item := range seenAnnouncers {
-				if item == announcerID {
+			//check if announcer not in seenAnnouncers
+			seen := false
+			for _, seenAnnouncer := range seenAnnouncers {
+				if seenAnnouncer == announcer.AnnouncerID {
 					seen = true
 					break
 				}
 			}
-			if !seen && student.OrderOfReceive == announcer.Start && student.OrderOfReceive <= announcer.End {
+			if seen {
+				continue
+			}
+
+			if student.OrderOfReceive == announcer.Start {
 				announcerScript = announcer.AnnouncerScript
 				seenAnnouncers = append(seenAnnouncers, announcer.AnnouncerID)
+				announcerID = announcer.AnnouncerID
 				break
 			}
 		}
@@ -127,30 +131,33 @@ func (c *Controller) GenerateSript() error {
 			}
 
 		}
-
+		if student.Faculty != previousStudent.Faculty {
+			payloads = append(payloads, entity.IndividualPayload{})
+		}
 		if announcerScript != "" {
 			payloads = append(payloads, entity.IndividualPayload{
 				Type: "script",
 				Data: entity.AnnouncerPayload{
 					AnnouncerID: announcerID,
 					Script:      strings.TrimSpace(announcerScript),
+					Faculty:     student.Faculty,
 				},
 			})
 		}
-		if i == 0 {
-			payloads = append(payloads, entity.IndividualPayload{
-				Type: "student name",
-				Data: entity.StudentPayload{
-					OrderOfReading: student.OrderOfReceive,
-					Name:           student.FirstName + " " + student.LastName,
-					Reading:        student.Reading,
-					RegReading:     student.RegReading,
-					Certificate:    strings.TrimSpace(certificateValue),
-				},
-			})
-		}
+		payloads = append(payloads, entity.IndividualPayload{
+			Type: "student name",
+			Data: entity.StudentPayload{
+				OrderOfReading: student.OrderOfReceive,
+				Name:           student.FirstName + " " + student.LastName,
+				Reading:        student.Reading,
+				RegReading:     student.RegReading,
+				Faculty:        student.Faculty,
+				Certificate:    strings.TrimSpace(certificateValue),
+			},
+		})
 		previousStudent = student
 	}
+	payloads = append(payloads, entity.IndividualPayload{})
 	c.Script = payloads
 	return nil
 }

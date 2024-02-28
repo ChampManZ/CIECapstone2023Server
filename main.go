@@ -44,6 +44,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	err = MainController.GenerateSript()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	//init echo
 	hl := handlers.NewHandlers(MainController)
 	hl.RegisterRoutes(hl.Echo)

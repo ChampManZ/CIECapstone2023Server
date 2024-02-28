@@ -21,6 +21,7 @@ type StudentPayload struct {
 	Name           string `json:"name"`
 	Reading        string `json:"reading"`
 	RegReading     string `json:"reg_reading"`
+	Faculty        string
 	Certificate    string `json:"cert"`
 }
 
@@ -50,6 +51,7 @@ type Announcer struct {
 type AnnouncerPayload struct {
 	AnnouncerID int    `json:"announcer_id"`
 	Script      string `json:"script"`
+	Faculty     string
 }
 
 // Student Data Struct from Query
