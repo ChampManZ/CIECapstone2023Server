@@ -28,3 +28,6 @@ failsave.txt
 
 # html files
 /html/dist
+
+#go build files
+capstone

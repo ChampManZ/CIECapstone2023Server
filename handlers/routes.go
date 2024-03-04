@@ -7,6 +7,7 @@ import (
 	"capstone/server/utility/config"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -348,25 +349,161 @@ func (hl handlers) SwitchMode(e echo.Context) error {
 	return e.JSON(http.StatusOK, hl.Controller.Mode)
 }
 
+// api to convert order of reading to counter of script
+func (hl handlers) OrderToCounter(e echo.Context) error {
+	orderOfReceiveParam := e.QueryParam("orderOfReceive")
+	facultyParam := e.QueryParam("faculty")
+	orderOfReceive, err := strconv.Atoi(orderOfReceiveParam)
+	if err != nil {
+		return e.JSON(http.StatusOK, err)
+	}
+
+	var found bool
+	var filtered_script []entity.IndividualPayload
+	filtered_script = append(filtered_script, entity.IndividualPayload{})
+	for _, payload := range hl.Controller.Script {
+		if payload.Type == "student name" {
+			if payload.Data.(entity.StudentPayload).Faculty == facultyParam {
+				filtered_script = append(filtered_script, payload)
+				found = true
+			}
+		}
+		if payload.Type == "script" {
+			if payload.Data.(entity.AnnouncerPayload).Faculty == facultyParam {
+				filtered_script = append(filtered_script, payload)
+				found = true
+			}
+		}
+		if found {
+			if payload.Type == "student name" {
+				if payload.Data.(entity.StudentPayload).Faculty != facultyParam {
+					break
+				}
+			}
+			if payload.Type == "script" {
+				if payload.Data.(entity.AnnouncerPayload).Faculty != facultyParam {
+					break
+				}
+			}
+		}
+	}
+	filtered_script = append(filtered_script, entity.IndividualPayload{})
+	//use orderOfReceive to find student in filtered_script
+	counter := -1
+	for i, payload := range filtered_script {
+		if payload.Type == "student name" {
+			if payload.Data.(entity.StudentPayload).OrderOfReading == orderOfReceive {
+				counter = i
+			}
+		}
+	}
+
+	if counter == -1 {
+		return e.JSON(http.StatusBadRequest, "Student not found")
+	}
+
+	//index previous entry to check if it is a script
+	if filtered_script[counter-1].Type == "script" {
+		counter -= 1
+	}
+
+	return e.JSON(http.StatusOK, counter)
+}
+
+func (hl handlers) GroupAnnouncersByFaculty(e echo.Context) error {
+	faculties, err := hl.Controller.MySQLConn.QueryUniqueFaculties()
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, err)
+	}
+
+	studentsSlice := make([]entity.Student, 0, len(hl.Controller.StudentList))
+	for _, student := range hl.Controller.StudentList {
+		studentsSlice = append(studentsSlice, student)
+	}
+	sort.SliceStable(studentsSlice, func(i, j int) bool {
+		return studentsSlice[i].OrderOfReceive < studentsSlice[j].OrderOfReceive
+	})
+
+	groupedAnnouncers := make(entity.AnnouncerGroupByFacultyPayload)
+
+	for _, faculty := range faculties {
+		for _, announcer := range hl.Controller.AnnouncerList {
+			for _, student := range studentsSlice {
+				if student.Faculty == faculty.Faculty && announcer.Start <= student.OrderOfReceive && announcer.End >= student.OrderOfReceive {
+					if _, exists := groupedAnnouncers[faculty.Faculty]; !exists {
+						groupedAnnouncers[faculty.Faculty] = []entity.AnnouncerGroupByFaculty{}
+					}
+					if !utility.AnnouncerAlreadyAdded(groupedAnnouncers[faculty.Faculty], announcer.AnnouncerID) {
+						Counter, err := hl.Controller.OrderToCounter(student.OrderOfReceive, faculty.Faculty)
+						if err != nil {
+							continue
+						}
+						groupedAnnouncers[faculty.Faculty] = append(groupedAnnouncers[faculty.Faculty], entity.AnnouncerGroupByFaculty{
+							AnnouncerID:   announcer.AnnouncerID,
+							AnnouncerName: announcer.AnnouncerName,
+							FirstOrder:    announcer.Start,
+							LastOrder:     announcer.End,
+							StartCounter:  Counter,
+						})
+					}
+					break
+				}
+			}
+		}
+	}
+
+	//sort announcer
+	for faculty, announcers := range groupedAnnouncers {
+		sort.Slice(announcers, func(i, j int) bool {
+			return announcers[i].FirstOrder < announcers[j].FirstOrder
+		})
+		groupedAnnouncers[faculty] = announcers
+	}
+	// sort faculty back to original order
+	orderedResponse := make(map[string][]entity.AnnouncerGroupByFaculty)
+	for _, faculty := range faculties {
+		if announcers, exists := groupedAnnouncers[faculty.Faculty]; exists {
+			orderedResponse[faculty.Faculty] = announcers
+		}
+	}
+
+	return e.JSON(http.StatusOK, orderedResponse)
+}
+
 func (hl handlers) RegisterRoutes(e *echo.Echo) {
+	// utility
 	e.GET("/healthcheck", hl.Healthcheck)
-	e.GET("/*", hl.Mainpage)
-	e.GET("/api/announce", hl.AnnounceAPI)
+	e.GET("/api/ord-to-count", hl.OrderToCounter)
+	e.GET("/api/switchMode", hl.SwitchMode)
+	e.GET("/api/incrementCounter", hl.IncrementCounter)
+	e.GET("/api/decrementCounter", hl.DecrementCounter)
 	e.GET("/api/counter", hl.CounterAPI)
+	e.GET("/api/dashboard", hl.DashboardAPI)
 	e.GET("/api/practice/announce", hl.PracticeAnnounceAPI)
-	e.GET("/api/faculties", hl.GetFacultiesAPI)
-	e.PUT("/api/notes", hl.UpdateNotes)
-	e.PUT("/api/students-list", hl.UpdateStudentList)
+
+	// files and pages
+	e.GET("/*", hl.Mainpage)
+	e.Static("/assets", "html/dist/assets")
+
+	//announcers
+	e.GET("/api/announce", hl.AnnounceAPI)
 	e.POST("/api/insert-announcer", hl.InsertAnnouncer)
 	e.PUT("/api/update-announcer", hl.UpdateAnnouncer)
 	e.GET("/api/announcers", hl.GetAnnouncers)
-	e.GET("/test", hl.TestscriptAPI)
-	e.GET("/api/dashboard", hl.DashboardAPI)
+	e.GET("/api/grouped-announcers", hl.GroupAnnouncersByFaculty)
 	e.DELETE("/api/delete-announcer", hl.DeleteAnnouncer)
-	e.GET("/api/incrementCounter", hl.IncrementCounter)
-	e.GET("/api/decrementCounter", hl.DecrementCounter)
-	e.GET("/api/switchMode", hl.SwitchMode)
-	e.Static("/assets", "html/dist/assets")
+
+	//students
+	e.PUT("/api/students-list", hl.UpdateStudentList)
+	e.PUT("/api/notes", hl.UpdateNotes)
+
+	//faculty
+	e.GET("/api/faculties", hl.GetFacultiesAPI)
+
+	//testing
+	e.GET("/test", hl.GroupAnnouncersByFaculty)
+
+	//middleware
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{echo.GET, echo.PUT, echo.POST, echo.DELETE},

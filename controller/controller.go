@@ -57,6 +57,7 @@ func (c *Controller) GenerateSript() error {
 		sortedStudents[i] = students[k]
 	}
 	var previousStudent entity.Student
+	payloads = append(payloads, entity.IndividualPayload{})
 	//loop through sorted list and construct script
 	for i, student := range sortedStudents {
 		var announcerID int = 0
@@ -84,56 +85,11 @@ func (c *Controller) GenerateSript() error {
 			}
 		}
 
-		//first case
-		if i == 0 {
-			degree := student.Degree
-			if utility.IsFirstCharNotEnglish(degree) {
-				degree = fmt.Sprintf("ปริญญา" + strings.TrimSpace(degree))
-			} else {
-				degree = fmt.Sprintf("ปริญญา " + strings.TrimSpace(degree))
-			}
-			announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(degree))
-
-			major := student.Major
-			if utility.IsFirstCharNotEnglish(major) {
-				major = fmt.Sprintf("สาขาวิชา" + strings.TrimSpace(major))
-			} else {
-				major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
-			}
-			announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(major))
-		} else {
-			degree := student.Degree
-			if utility.IsFirstCharNotEnglish(degree) {
-				degree = fmt.Sprintf("ปริญญา" + strings.TrimSpace(degree))
-			} else {
-				degree = fmt.Sprintf("ปริญญา " + strings.TrimSpace(degree))
-			}
-			if student.Degree != previousStudent.Degree {
-				announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(degree))
-			}
-
-			major := student.Major
-			if utility.IsFirstCharNotEnglish(major) {
-				major = fmt.Sprintf("สาขาวิชา" + strings.TrimSpace(major))
-			} else {
-				major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
-			}
-			if student.Major != previousStudent.Major {
-				announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(major))
-			}
-
-			if student.Honor != previousStudent.Honor {
-				if previousStudent.Honor != "เกียรตินิยมอันดับ 2" {
-					certificateValue = fmt.Sprintf(certificateValue + " " + student.Honor)
-				} else {
-					certificateValue = fmt.Sprintf(certificateValue + " " + strings.TrimSpace(major))
-				}
-			}
-
-		}
+		announcerScript, certificateValue = constructScript(i, student, announcerScript, previousStudent, certificateValue)
 		if student.Faculty != previousStudent.Faculty {
 			payloads = append(payloads, entity.IndividualPayload{})
 		}
+
 		if announcerScript != "" {
 			payloads = append(payloads, entity.IndividualPayload{
 				Type: "script",
@@ -160,4 +116,107 @@ func (c *Controller) GenerateSript() error {
 	payloads = append(payloads, entity.IndividualPayload{})
 	c.Script = payloads
 	return nil
+}
+
+func constructScript(i int, student entity.Student, announcerScript string, previousStudent entity.Student, certificateValue string) (string, string) {
+	if i == 0 {
+		degree := student.Degree
+		if utility.IsFirstCharNotEnglish(degree) {
+			degree = fmt.Sprintf("ปริญญา" + strings.TrimSpace(degree))
+		} else {
+			degree = fmt.Sprintf("ปริญญา " + strings.TrimSpace(degree))
+		}
+		announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(degree))
+
+		major := student.Major
+		if utility.IsFirstCharNotEnglish(major) {
+			major = fmt.Sprintf("สาขาวิชา" + strings.TrimSpace(major))
+		} else {
+			major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
+		}
+		announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(major))
+	} else {
+		degree := student.Degree
+		if utility.IsFirstCharNotEnglish(degree) {
+			degree = fmt.Sprintf("ปริญญา" + strings.TrimSpace(degree))
+		} else {
+			degree = fmt.Sprintf("ปริญญา " + strings.TrimSpace(degree))
+		}
+		if student.Degree != previousStudent.Degree {
+			announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(degree))
+		}
+
+		major := student.Major
+		if utility.IsFirstCharNotEnglish(major) {
+			major = fmt.Sprintf("สาขาวิชา" + strings.TrimSpace(major))
+		} else {
+			major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
+		}
+		if student.Major != previousStudent.Major {
+			announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(major))
+		}
+
+		if student.Honor != previousStudent.Honor {
+			if previousStudent.Honor != "เกียรตินิยมอันดับ 2" {
+				certificateValue = fmt.Sprintf(certificateValue + " " + student.Honor)
+			} else {
+				certificateValue = fmt.Sprintf(certificateValue + " " + strings.TrimSpace(major))
+			}
+		}
+
+	}
+	return announcerScript, certificateValue
+}
+
+func (c *Controller) OrderToCounter(orderOfReceive int, faculty string) (int, error) {
+	var found bool
+	var filtered_script []entity.IndividualPayload
+	filtered_script = append(filtered_script, entity.IndividualPayload{})
+	for _, payload := range c.Script {
+		if payload.Type == "student name" {
+			if payload.Data.(entity.StudentPayload).Faculty == faculty {
+				filtered_script = append(filtered_script, payload)
+				found = true
+			}
+		}
+		if payload.Type == "script" {
+			if payload.Data.(entity.AnnouncerPayload).Faculty == faculty {
+				filtered_script = append(filtered_script, payload)
+				found = true
+			}
+		}
+		if found {
+			if payload.Type == "student name" {
+				if payload.Data.(entity.StudentPayload).Faculty != faculty {
+					break
+				}
+			}
+			if payload.Type == "script" {
+				if payload.Data.(entity.AnnouncerPayload).Faculty != faculty {
+					break
+				}
+			}
+		}
+	}
+	filtered_script = append(filtered_script, entity.IndividualPayload{})
+	//use orderOfReceive to find student in filtered_script
+	counter := -1
+	for i, payload := range filtered_script {
+		if payload.Type == "student name" {
+			if payload.Data.(entity.StudentPayload).OrderOfReading == orderOfReceive {
+				counter = i
+			}
+		}
+	}
+
+	if counter == -1 {
+		return -1, fmt.Errorf("student not found")
+	}
+
+	//index previous entry to check if it is a script
+	if filtered_script[counter-1].Type == "script" {
+		counter -= 1
+	}
+
+	return counter, nil
 }

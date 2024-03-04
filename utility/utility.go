@@ -176,3 +176,12 @@ func FindStudentByOrder(students map[int]entity.Student, order int) int {
 	}
 	return -1 // Not found
 }
+
+func AnnouncerAlreadyAdded(announcers []entity.AnnouncerGroupByFaculty, announcerID int) bool {
+	for _, announcer := range announcers {
+		if announcer.AnnouncerID == announcerID {
+			return true
+		}
+	}
+	return false
+}

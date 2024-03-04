@@ -86,3 +86,13 @@ type FacultySessionPayload struct {
 	Morning   []string `json:"morning"`
 	Afternoon []string `json:"afternoon"`
 }
+
+type AnnouncerGroupByFaculty struct {
+	AnnouncerID   int    `json:"AnnouncerID"`
+	AnnouncerName string `json:"AnnouncerName"`
+	FirstOrder    int    `json:"FirstOrder"`
+	LastOrder     int    `json:"LastOrder"`
+	StartCounter  int    `json:"StartCounter"`
+}
+
+type AnnouncerGroupByFacultyPayload map[string][]AnnouncerGroupByFaculty
