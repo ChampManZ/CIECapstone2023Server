@@ -1,7 +1,7 @@
 include .env
 export
 
-.PHONY: sql setup run stop del
+.PHONY: sql setup run stop del run-in-background terminate
 
 sql:
 	docker compose -f ${MYSQL_COMPOSE} up -d
@@ -24,3 +24,16 @@ del:
 	docker compose -f ${MYSQL_COMPOSE} down -v
 build:
 	GOOS=linux GOARCH=amd64 go build -o capstone
+
+run-in-background:
+	@echo "Starting capstone in background..."
+	@nohup ./capstone &
+
+terminate:
+	@echo "Terminating capstone..."
+	@PIDS=$$(pgrep -f './capstone') ; \
+	if [ -n "$$PIDS" ]; then \
+		kill $$PIDS ; \
+	else \
+		echo "No capstone process found."; \
+	fi
