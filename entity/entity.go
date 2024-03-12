@@ -1,9 +1,24 @@
 package entity
 
-type AnnouncePayload struct {
-	Previous interface{} `json:"prev"`
-	Current  interface{} `json:"curr"`
-	Next     interface{} `json:"next"`
+// API
+type AnnounceAPIPayload struct {
+	Session string `json:"session"`
+	Faculty string `json:"faculty"`
+	Blocks  Blocks `json:"blocks"`
+}
+
+type Blocks struct {
+	Prev  IndividualPayload `json:"prev"`
+	Curr  IndividualPayload `json:"curr"`
+	Next1 IndividualPayload `json:"next1"`
+	Next2 IndividualPayload `json:"next2"`
+}
+
+// MQTT
+type AnnounceMQTTPayload struct {
+	Session string            `json:"session"`
+	Faculty string            `json:"faculty"`
+	Block   IndividualPayload `json:"block"`
 }
 
 type CounterPayload struct {
@@ -21,7 +36,8 @@ type StudentPayload struct {
 	Name           string `json:"name"`
 	Reading        string `json:"reading"`
 	RegReading     string `json:"reg_reading"`
-	Faculty        string
+	Faculty        string `json:"-"`
+	Session        string `json:"-"`
 	Certificate    string `json:"cert"`
 }
 
@@ -51,7 +67,8 @@ type Announcer struct {
 type AnnouncerPayload struct {
 	AnnouncerID int    `json:"announcer_id"`
 	Script      string `json:"script"`
-	Faculty     string
+	Faculty     string `json:"-"`
+	Session     string `json:"-"`
 }
 
 // Student Data Struct from Query

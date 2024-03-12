@@ -3,12 +3,10 @@ package mqttx
 import (
 	conx "capstone/server/controller"
 	"capstone/server/entity"
-	"capstone/server/utility"
 	"capstone/server/utility/config"
 	"encoding/json"
 	"fmt"
 	"log"
-	"strconv"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
@@ -41,61 +39,38 @@ var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err
 	fmt.Printf("Connection lost: %v", err)
 }
 
-func OnSignal(mc conx.Controller) mqtt.MessageHandler {
+func OnSignal(mc *conx.Controller) mqtt.MessageHandler {
 	return func(client mqtt.Client, msg mqtt.Message) {
 		messageString := string(msg.Payload())
 		log.Printf("Received message: %s from topic: %s\n", messageString, msg.Topic())
 		if messageString == "1" {
 			mc.IncrementGlobalCounter()
 			log.Printf("Counter: %d", mc.GlobalCounter)
-			var previous, current, next *entity.Student = nil, nil, nil
-			var prevPayload, currPayload, nextPayload *entity.IndividualPayload = nil, nil, nil
-			if prevStudent, ok := mc.GetStudentByCounter(mc.GlobalCounter - 1); ok {
-				previous = prevStudent
-				prevPayload = &entity.IndividualPayload{
-					Type: "student name",
-					Data: entity.StudentPayload{
-						OrderOfReading: mc.GlobalCounter - 1,
-						Name:           previous.FirstName + " " + previous.LastName,
-						Reading:        previous.Reading,
-						Certificate:    previous.Certificate,
-					},
-				}
-				log.Printf("Previous: %+v", previous)
+			payload := entity.AnnounceMQTTPayload{}
+			var data entity.IndividualPayload
+			index := mc.GlobalCounter + 3
+			if index >= 0 && index < len(mc.FilteredScript) {
+				data = mc.FilteredScript[index]
 			}
 
-			if currentStudent, ok := mc.GetStudentByCounter(mc.GlobalCounter); ok {
-				current = currentStudent
-				currPayload = &entity.IndividualPayload{
-					Type: "student name",
-					Data: entity.StudentPayload{
-						OrderOfReading: mc.GlobalCounter,
-						Name:           current.FirstName + " " + current.LastName,
-						Reading:        current.Reading,
-						Certificate:    current.Certificate,
+			if data.Type == "student name" {
+				payload = entity.AnnounceMQTTPayload{
+					Session: data.Data.(entity.StudentPayload).Session,
+					Faculty: data.Data.(entity.StudentPayload).Faculty,
+					Block: entity.IndividualPayload{
+						Type: "student name",
+						Data: data.Data,
 					},
 				}
-				log.Printf("Current: %+v", current)
-			}
-
-			if nextStudent, ok := mc.GetStudentByCounter(mc.GlobalCounter + 1); ok {
-				next = nextStudent
-				nextPayload = &entity.IndividualPayload{
-					Type: "student name",
-					Data: entity.StudentPayload{
-						OrderOfReading: mc.GlobalCounter + 1,
-						Name:           next.FirstName + " " + next.LastName,
-						Reading:        next.Reading,
-						Certificate:    next.Certificate,
+			} else if data.Type == "script" {
+				payload = entity.AnnounceMQTTPayload{
+					Session: data.Data.(entity.AnnouncerPayload).Session,
+					Faculty: data.Data.(entity.AnnouncerPayload).Faculty,
+					Block: entity.IndividualPayload{
+						Type: "script",
+						Data: data.Data,
 					},
 				}
-				log.Printf("Next: %+v", next)
-			}
-
-			payload := entity.AnnouncePayload{
-				Previous: prevPayload,
-				Current:  currPayload,
-				Next:     nextPayload,
 			}
 
 			jsonData, err := json.Marshal(payload)
@@ -105,16 +80,12 @@ func OnSignal(mc conx.Controller) mqtt.MessageHandler {
 
 			client.Publish("announce", 0, false, jsonData)
 
-			//TODO: replace
-			err = utility.WriteStringToFile("failsave.txt", strconv.Itoa(mc.GlobalCounter))
-			if err != nil {
-				log.Fatal(err)
-			}
+			//TODO: fail save
 		}
 	}
 }
 
-func OnHealthcheck(mc conx.Controller) mqtt.MessageHandler {
+func OnHealthcheck(mc *conx.Controller) mqtt.MessageHandler {
 	return func(client mqtt.Client, msg mqtt.Message) {
 		messageString := string(msg.Payload())
 		if messageString == "ok" {
@@ -123,7 +94,7 @@ func OnHealthcheck(mc conx.Controller) mqtt.MessageHandler {
 	}
 }
 
-func RegisterCallBacks(c mqtt.Client, mc conx.Controller) {
+func RegisterCallBacks(c mqtt.Client, mc *conx.Controller) {
 	token := c.Subscribe("signal", 0, OnSignal(mc))
 	token.Wait()
 	token = c.Subscribe("healthcheck", 0, OnHealthcheck(mc))

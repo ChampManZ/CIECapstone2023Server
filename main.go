@@ -50,7 +50,7 @@ func main() {
 	}
 
 	//init echo
-	hl := handlers.NewHandlers(MainController)
+	hl := handlers.NewHandlers(&MainController)
 	hl.RegisterRoutes(hl.Echo)
 
 	// Start server

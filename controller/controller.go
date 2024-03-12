@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 )
 
 type Controller struct {
@@ -15,7 +16,9 @@ type Controller struct {
 	AnnouncerList        map[int]entity.Announcer
 	MySQLConn            *utility.MySQLDB
 	Script               []entity.IndividualPayload
+	FilteredScript       []entity.IndividualPayload
 	Mode                 string
+	Lock                 sync.Mutex
 }
 
 func NewController() Controller {
@@ -40,7 +43,9 @@ func (c *Controller) GetStudentByCounter(counter int) (*entity.Student, bool) {
 
 func (c *Controller) GenerateSript() error {
 	var payloads []entity.IndividualPayload
+	var filteredPayloads []entity.IndividualPayload
 	var seenAnnouncers []int
+	var session string = "เช้า"
 	//get student and announcer lists
 	students := c.StudentList
 	announcers := c.AnnouncerList
@@ -57,7 +62,7 @@ func (c *Controller) GenerateSript() error {
 		sortedStudents[i] = students[k]
 	}
 	var previousStudent entity.Student
-	payloads = append(payloads, entity.IndividualPayload{})
+	//payloads = append(payloads, entity.IndividualPayload{})
 	//loop through sorted list and construct script
 	for i, student := range sortedStudents {
 		var announcerID int = 0
@@ -90,6 +95,10 @@ func (c *Controller) GenerateSript() error {
 			payloads = append(payloads, entity.IndividualPayload{})
 		}
 
+		if announcers[announcerID].Session == "บ่าย" {
+			session = "บ่าย"
+		}
+
 		if announcerScript != "" {
 			payloads = append(payloads, entity.IndividualPayload{
 				Type: "script",
@@ -97,6 +106,16 @@ func (c *Controller) GenerateSript() error {
 					AnnouncerID: announcerID,
 					Script:      strings.TrimSpace(announcerScript),
 					Faculty:     student.Faculty,
+					Session:     session,
+				},
+			})
+			filteredPayloads = append(filteredPayloads, entity.IndividualPayload{
+				Type: "script",
+				Data: entity.AnnouncerPayload{
+					AnnouncerID: announcerID,
+					Script:      strings.TrimSpace(announcerScript),
+					Faculty:     student.Faculty,
+					Session:     session,
 				},
 			})
 		}
@@ -109,12 +128,26 @@ func (c *Controller) GenerateSript() error {
 				RegReading:     student.RegReading,
 				Faculty:        student.Faculty,
 				Certificate:    strings.TrimSpace(certificateValue),
+				Session:        session,
+			},
+		})
+		filteredPayloads = append(filteredPayloads, entity.IndividualPayload{
+			Type: "student name",
+			Data: entity.StudentPayload{
+				OrderOfReading: student.OrderOfReceive,
+				Name:           student.FirstName + " " + student.LastName,
+				Reading:        student.Reading,
+				RegReading:     student.RegReading,
+				Faculty:        student.Faculty,
+				Certificate:    strings.TrimSpace(certificateValue),
+				Session:        session,
 			},
 		})
 		previousStudent = student
 	}
 	payloads = append(payloads, entity.IndividualPayload{})
 	c.Script = payloads
+	c.FilteredScript = filteredPayloads
 	return nil
 }
 

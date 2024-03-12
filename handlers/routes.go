@@ -20,9 +20,9 @@ type handlers struct {
 	Echo       *echo.Echo
 }
 
-func NewHandlers(controller conx.Controller) handlers {
+func NewHandlers(controller *conx.Controller) handlers {
 	return handlers{
-		Controller: &controller,
+		Controller: controller,
 		Echo:       echo.New(),
 	}
 }
@@ -36,21 +36,44 @@ func (hl handlers) Mainpage(e echo.Context) error {
 }
 
 func (hl handlers) AnnounceAPI(e echo.Context) error {
-	var currPayload entity.IndividualPayload
-	if currentStudent, ok := hl.Controller.StudentList[hl.Controller.GlobalCounter]; ok {
-		current := currentStudent
-		currPayload = entity.IndividualPayload{
-			Type: "student name",
-			Data: entity.StudentPayload{
-				OrderOfReading: hl.Controller.GlobalCounter,
-				Name:           current.FirstName + " " + current.LastName,
-				Reading:        current.Reading,
-				Certificate:    current.Certificate,
-			},
-		}
+	var response entity.AnnounceAPIPayload
+	prevPayload := entity.IndividualPayload{}
+	currPayload := entity.IndividualPayload{}
+	next1Payload := entity.IndividualPayload{}
+	next2Payload := entity.IndividualPayload{}
+	index := hl.Controller.GlobalCounter
+
+	if index-1 >= 0 && index-1 < len(hl.Controller.FilteredScript) {
+		prevPayload = hl.Controller.FilteredScript[index-1]
 	}
 
-	return e.JSON(200, currPayload)
+	if index >= 0 && index < len(hl.Controller.FilteredScript) {
+		currPayload = hl.Controller.FilteredScript[index]
+	}
+
+	if index+1 >= 0 && index+1 < len(hl.Controller.FilteredScript) {
+		next1Payload = hl.Controller.FilteredScript[index+1]
+	}
+
+	if index+2 >= 0 && index+2 < len(hl.Controller.FilteredScript) {
+		next2Payload = hl.Controller.FilteredScript[index+2]
+	}
+
+	if currPayload.Type == "student name" {
+		response.Faculty = currPayload.Data.(entity.StudentPayload).Faculty
+		response.Session = currPayload.Data.(entity.StudentPayload).Session
+	} else if currPayload.Type == "script" {
+		response.Faculty = currPayload.Data.(entity.AnnouncerPayload).Faculty
+		response.Session = currPayload.Data.(entity.AnnouncerPayload).Session
+	}
+
+	response.Blocks = entity.Blocks{
+		Prev:  prevPayload,
+		Curr:  currPayload,
+		Next1: next1Payload,
+		Next2: next2Payload}
+
+	return e.JSON(200, response)
 }
 
 func (hl handlers) CounterAPI(e echo.Context) error {
@@ -141,7 +164,7 @@ func (hl handlers) UpdateNotes(e echo.Context) error {
 
 	location := utility.FindStudentByOrder(hl.Controller.StudentList, orderOfReceive)
 	if location == -1 {
-		return e.JSON(http.StatusInternalServerError, err.Error())
+		return e.JSON(http.StatusInternalServerError, "Student not found")
 	}
 
 	temp := hl.Controller.StudentList[location]
@@ -324,6 +347,9 @@ func (hl handlers) IncrementCounter(e echo.Context) error {
 	if hl.Controller.Mode != "sensor" {
 		return e.JSON(http.StatusBadRequest, "Current Mode is not sensor")
 	}
+
+	hl.Controller.Lock.Lock()
+	defer hl.Controller.Lock.Unlock()
 	hl.Controller.GlobalCounter += 1
 	return e.JSON(http.StatusOK, "OK")
 }
@@ -335,6 +361,9 @@ func (hl handlers) DecrementCounter(e echo.Context) error {
 	if hl.Controller.GlobalCounter <= 0 {
 		return e.JSON(http.StatusBadRequest, "Counter cannot be less than zero")
 	}
+
+	hl.Controller.Lock.Lock()
+	defer hl.Controller.Lock.Unlock()
 	hl.Controller.GlobalCounter -= 1
 	return e.JSON(http.StatusOK, "OK")
 }
@@ -501,7 +530,7 @@ func (hl handlers) RegisterRoutes(e *echo.Echo) {
 	e.GET("/api/faculties", hl.GetFacultiesAPI)
 
 	//testing
-	e.GET("/test", hl.GroupAnnouncersByFaculty)
+	e.GET("/test", hl.TestscriptAPI)
 
 	//middleware
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
