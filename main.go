@@ -21,6 +21,8 @@ func main() {
 	var MainController = conx.NewController()
 
 	client := mqttx.NewMqttx(config.GlobalConfig)
+	MainController.MqttClient = client
+	mqttx.RegisterCallBacks(client, &MainController)
 	client.Publish("healthcheck", 0, false, "CHK")
 	//utility.CheckMicrocontrollerHealth(client, &MainController.MicrocontrollerAlive)
 

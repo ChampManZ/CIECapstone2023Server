@@ -39,39 +39,46 @@ func (hl handlers) AnnounceAPI(e echo.Context) error {
 	var response entity.AnnounceAPIPayload
 	prevPayload := entity.IndividualPayload{}
 	currPayload := entity.IndividualPayload{}
-	next1Payload := entity.IndividualPayload{}
+	nextPayload := entity.IndividualPayload{}
 	next2Payload := entity.IndividualPayload{}
 	index := hl.Controller.GlobalCounter
 
-	if index-1 >= 0 && index-1 < len(hl.Controller.FilteredScript) {
-		prevPayload = hl.Controller.FilteredScript[index-1]
+	script := hl.Controller.Script
+	script = append(script, entity.IndividualPayload{})
+
+	if index-1 >= 0 && index-1 < len(script) {
+		prevPayload = script[index-1]
 	}
 
-	if index >= 0 && index < len(hl.Controller.FilteredScript) {
-		currPayload = hl.Controller.FilteredScript[index]
+	if index >= 0 && index < len(script) {
+		currPayload = script[index]
 	}
 
-	if index+1 >= 0 && index+1 < len(hl.Controller.FilteredScript) {
-		next1Payload = hl.Controller.FilteredScript[index+1]
+	if index+1 >= 0 && index+1 < len(script) {
+		nextPayload = script[index+1]
 	}
 
-	if index+2 >= 0 && index+2 < len(hl.Controller.FilteredScript) {
-		next2Payload = hl.Controller.FilteredScript[index+2]
+	if index+2 >= 0 && index+2 < len(script) {
+		next2Payload = script[index+2]
 	}
 
 	if currPayload.Type == "student name" {
 		response.Faculty = currPayload.Data.(entity.StudentPayload).Faculty
 		response.Session = currPayload.Data.(entity.StudentPayload).Session
+		response.CurrentNumber = currPayload.Data.(entity.StudentPayload).Order
+		response.MaxNumber = currPayload.Data.(entity.StudentPayload).FacultyMax
 	} else if currPayload.Type == "script" {
 		response.Faculty = currPayload.Data.(entity.AnnouncerPayload).Faculty
 		response.Session = currPayload.Data.(entity.AnnouncerPayload).Session
 	}
 
-	response.Blocks = entity.Blocks{
-		Prev:  prevPayload,
-		Curr:  currPayload,
-		Next1: next1Payload,
-		Next2: next2Payload}
+	response.Mode = hl.Controller.Mode
+	if index != 0 {
+		response.Blocks = append(response.Blocks, entity.IndividualPayload{})
+		response.Blocks = append(response.Blocks, script[0:index-1]...)
+	}
+
+	response.Blocks = append(response.Blocks, []entity.IndividualPayload{prevPayload, currPayload, nextPayload, next2Payload}...)
 
 	return e.JSON(200, response)
 }
@@ -108,7 +115,7 @@ func (hl handlers) PracticeAnnounceAPI(e echo.Context) error {
 	var filtered_script []entity.IndividualPayload
 
 	//append to front
-	filtered_script = append(filtered_script, entity.IndividualPayload{})
+	filtered_script = append([]entity.IndividualPayload{{}}, filtered_script...)
 	for _, payload := range hl.Controller.Script {
 		if payload.Type == "student name" {
 			if payload.Data.(entity.StudentPayload).Faculty == facultyParam {
@@ -344,13 +351,16 @@ func (hl handlers) DashboardAPI(e echo.Context) error {
 }
 
 func (hl handlers) IncrementCounter(e echo.Context) error {
+	flag := e.QueryParam("client")
 	if hl.Controller.Mode != "sensor" {
 		return e.JSON(http.StatusBadRequest, "Current Mode is not sensor")
 	}
+	if flag == "false" && hl.Controller.Script[hl.Controller.GlobalCounter].Type == "script" {
+		hl.Controller.MqttClient.Publish("signal", 2, false, "3")
+		return e.JSON(http.StatusOK, "OK")
+	}
+	hl.Controller.MqttClient.Publish("signal", 2, false, "1")
 
-	hl.Controller.Lock.Lock()
-	defer hl.Controller.Lock.Unlock()
-	hl.Controller.GlobalCounter += 1
 	return e.JSON(http.StatusOK, "OK")
 }
 
@@ -362,13 +372,14 @@ func (hl handlers) DecrementCounter(e echo.Context) error {
 		return e.JSON(http.StatusBadRequest, "Counter cannot be less than zero")
 	}
 
-	hl.Controller.Lock.Lock()
-	defer hl.Controller.Lock.Unlock()
-	hl.Controller.GlobalCounter -= 1
+	hl.Controller.MqttClient.Publish("signal", 2, false, "2")
 	return e.JSON(http.StatusOK, "OK")
 }
 
 func (hl handlers) SwitchMode(e echo.Context) error {
+	hl.Controller.Lock.Lock()
+	defer hl.Controller.Lock.Unlock()
+
 	mode := hl.Controller.Mode
 	if mode == "auto" {
 		hl.Controller.Mode = "sensor"
@@ -499,23 +510,70 @@ func (hl handlers) GroupAnnouncersByFaculty(e echo.Context) error {
 	return e.JSON(http.StatusOK, orderedResponse)
 }
 
+func (hl handlers) GetCounter(e echo.Context) error {
+	return e.JSON(http.StatusOK, hl.Controller.GlobalCounter)
+}
+
+func (hl handlers) ResetCounter(e echo.Context) error {
+	hl.Controller.Lock.Lock()
+	defer hl.Controller.Lock.Unlock()
+	hl.Controller.GlobalCounter = 0
+	return e.JSON(http.StatusOK, "OK")
+}
+
+func (hl handlers) AdjustAutoSpeed(e echo.Context) error {
+	speedParam := e.QueryParam("speed")
+	if speedParam == "" {
+		return e.JSON(http.StatusBadRequest, "Speed parameter not found")
+	}
+	speed, err := strconv.Atoi(speedParam)
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid speed parameter")
+	}
+	if speed < 0 {
+		return e.JSON(http.StatusBadRequest, "Speed cannot be less than zero")
+	}
+
+	// Safely update AutoSpeed
+	hl.Controller.Lock.Lock()
+	hl.Controller.AutoSpeed = speed
+	hl.Controller.Lock.Unlock()
+
+	select {
+	case hl.Controller.SpeedChangeSig <- speed:
+		// Speed update signal sent successfully
+	default:
+		// Prevent chan block if signal sent is in progress
+	}
+
+	return e.JSON(http.StatusOK, map[string]string{"new_speed": speedParam})
+
+}
+
 func (hl handlers) RegisterRoutes(e *echo.Echo) {
 	// utility
 	e.GET("/healthcheck", hl.Healthcheck)
 	e.GET("/api/ord-to-count", hl.OrderToCounter)
 	e.GET("/api/switchMode", hl.SwitchMode)
+	e.GET("/api/dashboard", hl.DashboardAPI)
+
+	//Display
+	e.GET("/api/announce", hl.AnnounceAPI)
+	e.GET("/api/practice/announce", hl.PracticeAnnounceAPI)
+
+	//Counter
 	e.GET("/api/incrementCounter", hl.IncrementCounter)
 	e.GET("/api/decrementCounter", hl.DecrementCounter)
+	e.GET("/api/getCounter", hl.GetCounter)
+	e.GET("/api/resetCounter", hl.ResetCounter)
 	e.GET("/api/counter", hl.CounterAPI)
-	e.GET("/api/dashboard", hl.DashboardAPI)
-	e.GET("/api/practice/announce", hl.PracticeAnnounceAPI)
+	e.GET("/api/autoSpeed", hl.AdjustAutoSpeed)
 
 	// files and pages
 	e.GET("/*", hl.Mainpage)
 	e.Static("/assets", "html/dist/assets")
 
 	//announcers
-	e.GET("/api/announce", hl.AnnounceAPI)
 	e.POST("/api/insert-announcer", hl.InsertAnnouncer)
 	e.PUT("/api/update-announcer", hl.UpdateAnnouncer)
 	e.GET("/api/announcers", hl.GetAnnouncers)

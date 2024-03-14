@@ -7,6 +7,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
+
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 type Controller struct {
@@ -15,9 +18,13 @@ type Controller struct {
 	StudentList          map[int]entity.Student
 	AnnouncerList        map[int]entity.Announcer
 	MySQLConn            *utility.MySQLDB
+	MqttClient           mqtt.Client
 	Script               []entity.IndividualPayload
-	FilteredScript       []entity.IndividualPayload
 	Mode                 string
+	AutoSpeed            int
+	SpeedChangeSig       chan int
+	modeChangeSig        chan string
+	stop                 chan struct{}
 	Lock                 sync.Mutex
 }
 
@@ -28,11 +35,24 @@ func NewController() Controller {
 		StudentList:          make(map[int]entity.Student),
 		AnnouncerList:        make(map[int]entity.Announcer),
 		Mode:                 "sensor",
+		modeChangeSig:        make(chan string),
+		SpeedChangeSig:       make(chan int, 1),
+		stop:                 make(chan struct{}),
+		AutoSpeed:            25,
 	}
 }
 
 func (c *Controller) IncrementGlobalCounter() int {
+	c.Lock.Lock()
+	defer c.Lock.Unlock()
 	c.GlobalCounter++
+	return c.GlobalCounter
+}
+
+func (c *Controller) DecrementGlobalCounter() int {
+	c.Lock.Lock()
+	defer c.Lock.Unlock()
+	c.GlobalCounter--
 	return c.GlobalCounter
 }
 
@@ -43,12 +63,19 @@ func (c *Controller) GetStudentByCounter(counter int) (*entity.Student, bool) {
 
 func (c *Controller) GenerateSript() error {
 	var payloads []entity.IndividualPayload
-	var filteredPayloads []entity.IndividualPayload
 	var seenAnnouncers []int
 	var session string = "เช้า"
 	//get student and announcer lists
 	students := c.StudentList
 	announcers := c.AnnouncerList
+
+	facultyOrderCount := make(map[string]int)
+	facultyMax := make(map[string]int)
+
+	//count max for each faculty
+	for _, student := range students {
+		facultyMax[student.Faculty]++
+	}
 
 	//sort student list by order of receive
 	keys := make([]int, 0, len(students))
@@ -65,6 +92,7 @@ func (c *Controller) GenerateSript() error {
 	//payloads = append(payloads, entity.IndividualPayload{})
 	//loop through sorted list and construct script
 	for i, student := range sortedStudents {
+		facultyOrderCount[student.Faculty]++
 		var announcerID int = 0
 		var announcerScript string = ""
 		var certificateValue string = ""
@@ -90,10 +118,13 @@ func (c *Controller) GenerateSript() error {
 			}
 		}
 
+		order := facultyOrderCount[student.Faculty]
+		max := facultyMax[student.Faculty]
+
 		announcerScript, certificateValue = constructScript(i, student, announcerScript, previousStudent, certificateValue)
-		if student.Faculty != previousStudent.Faculty {
-			payloads = append(payloads, entity.IndividualPayload{})
-		}
+		// if student.Faculty != previousStudent.Faculty {
+		// 	payloads = append(payloads, entity.IndividualPayload{})
+		// }
 
 		if announcers[announcerID].Session == "บ่าย" {
 			session = "บ่าย"
@@ -101,15 +132,6 @@ func (c *Controller) GenerateSript() error {
 
 		if announcerScript != "" {
 			payloads = append(payloads, entity.IndividualPayload{
-				Type: "script",
-				Data: entity.AnnouncerPayload{
-					AnnouncerID: announcerID,
-					Script:      strings.TrimSpace(announcerScript),
-					Faculty:     student.Faculty,
-					Session:     session,
-				},
-			})
-			filteredPayloads = append(filteredPayloads, entity.IndividualPayload{
 				Type: "script",
 				Data: entity.AnnouncerPayload{
 					AnnouncerID: announcerID,
@@ -129,25 +151,14 @@ func (c *Controller) GenerateSript() error {
 				Faculty:        student.Faculty,
 				Certificate:    strings.TrimSpace(certificateValue),
 				Session:        session,
-			},
-		})
-		filteredPayloads = append(filteredPayloads, entity.IndividualPayload{
-			Type: "student name",
-			Data: entity.StudentPayload{
-				OrderOfReading: student.OrderOfReceive,
-				Name:           student.FirstName + " " + student.LastName,
-				Reading:        student.Reading,
-				RegReading:     student.RegReading,
-				Faculty:        student.Faculty,
-				Certificate:    strings.TrimSpace(certificateValue),
-				Session:        session,
+				Order:          order,
+				FacultyMax:     max,
 			},
 		})
 		previousStudent = student
 	}
-	payloads = append(payloads, entity.IndividualPayload{})
+	//payloads = append(payloads, entity.IndividualPayload{})
 	c.Script = payloads
-	c.FilteredScript = filteredPayloads
 	return nil
 }
 
@@ -252,4 +263,46 @@ func (c *Controller) OrderToCounter(orderOfReceive int, faculty string) (int, er
 	}
 
 	return counter, nil
+}
+
+func (c *Controller) PublishMQTT() {
+	var ticker *time.Ticker
+	var tickerC <-chan time.Time
+
+	for {
+		select {
+		case mode := <-c.modeChangeSig:
+			// Mode change handling remains the same
+			if mode == "auto" && ticker == nil {
+				// Initialize the ticker with the current AutoSpeed
+				c.Lock.Lock()
+				interval := time.Minute / time.Duration(c.AutoSpeed)
+				c.Lock.Unlock()
+
+				ticker = time.NewTicker(interval)
+				tickerC = ticker.C
+			} else if mode != "auto" && ticker != nil {
+				ticker.Stop()
+				ticker = nil
+				tickerC = nil
+			}
+		case <-tickerC:
+			// Perform MQTT publishing
+			c.MqttClient.Publish("signal", 0, false, "1")
+		case newSpeed := <-c.SpeedChangeSig:
+			// Handle speed change
+			if ticker != nil {
+				ticker.Stop()
+				interval := time.Minute / time.Duration(newSpeed)
+				ticker = time.NewTicker(interval)
+				tickerC = ticker.C
+			}
+		case <-c.stop:
+			if ticker != nil {
+				ticker.Stop()
+			}
+			return // Exit the goroutine
+		}
+	}
+
 }

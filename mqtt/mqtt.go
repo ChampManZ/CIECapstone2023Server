@@ -14,7 +14,7 @@ import (
 func NewMqttx(conf *config.Config) mqtt.Client {
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(fmt.Sprintf("tls://%s:%d", conf.MQTT_server, conf.MQTT_port))
-	opts.SetClientID("go-mqtt-client")
+	opts.SetClientID("go-mqtt-clientx")
 	opts.SetUsername(conf.MQTT_username)
 	opts.SetPassword(conf.MQTT_password)
 	opts.SetDefaultPublishHandler(messagePubHandler)
@@ -49,14 +49,17 @@ func OnSignal(mc *conx.Controller) mqtt.MessageHandler {
 			payload := entity.AnnounceMQTTPayload{}
 			var data entity.IndividualPayload
 			index := mc.GlobalCounter + 3
-			if index >= 0 && index < len(mc.FilteredScript) {
-				data = mc.FilteredScript[index]
+			if index >= 0 && index < len(mc.Script) {
+				data = mc.Script[index]
 			}
 
 			if data.Type == "student name" {
 				payload = entity.AnnounceMQTTPayload{
-					Session: data.Data.(entity.StudentPayload).Session,
-					Faculty: data.Data.(entity.StudentPayload).Faculty,
+					Revert:        false,
+					CurrentNumber: data.Data.(entity.StudentPayload).Order,
+					MaxNumber:     data.Data.(entity.StudentPayload).FacultyMax,
+					Session:       data.Data.(entity.StudentPayload).Session,
+					Faculty:       data.Data.(entity.StudentPayload).Faculty,
 					Block: entity.IndividualPayload{
 						Type: "student name",
 						Data: data.Data,
@@ -64,6 +67,7 @@ func OnSignal(mc *conx.Controller) mqtt.MessageHandler {
 				}
 			} else if data.Type == "script" {
 				payload = entity.AnnounceMQTTPayload{
+					Revert:  true,
 					Session: data.Data.(entity.AnnouncerPayload).Session,
 					Faculty: data.Data.(entity.AnnouncerPayload).Faculty,
 					Block: entity.IndividualPayload{
@@ -73,14 +77,97 @@ func OnSignal(mc *conx.Controller) mqtt.MessageHandler {
 				}
 			}
 
+			payload.Mode = mc.Mode
+
 			jsonData, err := json.Marshal(payload)
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			client.Publish("announce", 0, false, jsonData)
+			client.Publish("announce", 2, false, jsonData)
 
 			//TODO: fail save
+		} else if messageString == "2" {
+			mc.DecrementGlobalCounter()
+			log.Printf("Counter: %d", mc.GlobalCounter)
+			payload := entity.AnnounceMQTTPayload{}
+			var data entity.IndividualPayload
+			index := mc.GlobalCounter + 3
+			if index >= 0 && index < len(mc.Script) {
+				data = mc.Script[index]
+			}
+
+			if data.Type == "student name" {
+				payload = entity.AnnounceMQTTPayload{
+					Revert:  false,
+					Session: data.Data.(entity.StudentPayload).Session,
+					Faculty: data.Data.(entity.StudentPayload).Faculty,
+					Block: entity.IndividualPayload{
+						Type: "student name",
+						Data: data.Data,
+					},
+				}
+			} else if data.Type == "script" {
+				payload = entity.AnnounceMQTTPayload{
+					Revert:  true,
+					Session: data.Data.(entity.AnnouncerPayload).Session,
+					Faculty: data.Data.(entity.AnnouncerPayload).Faculty,
+					Block: entity.IndividualPayload{
+						Type: "script",
+						Data: data.Data,
+					},
+				}
+			}
+
+			payload.Mode = mc.Mode
+
+			jsonData, err := json.Marshal(payload)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			client.Publish("announce", 2, false, jsonData)
+		} else if messageString == "3" {
+			mc.IncrementGlobalCounter()
+			mc.IncrementGlobalCounter()
+			log.Printf("Counter: %d", mc.GlobalCounter)
+			payload := entity.AnnounceMQTTPayload{}
+			var data entity.IndividualPayload
+			index := mc.GlobalCounter + 3
+			if index >= 0 && index < len(mc.Script) {
+				data = mc.Script[index]
+			}
+
+			if data.Type == "student name" {
+				payload = entity.AnnounceMQTTPayload{
+					Revert:  false,
+					Session: data.Data.(entity.StudentPayload).Session,
+					Faculty: data.Data.(entity.StudentPayload).Faculty,
+					Block: entity.IndividualPayload{
+						Type: "student name",
+						Data: data.Data,
+					},
+				}
+			} else if data.Type == "script" {
+				payload = entity.AnnounceMQTTPayload{
+					Revert:  true,
+					Session: data.Data.(entity.AnnouncerPayload).Session,
+					Faculty: data.Data.(entity.AnnouncerPayload).Faculty,
+					Block: entity.IndividualPayload{
+						Type: "script",
+						Data: data.Data,
+					},
+				}
+			}
+
+			payload.Mode = mc.Mode
+
+			jsonData, err := json.Marshal(payload)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			client.Publish("announce", 2, false, jsonData)
 		}
 	}
 }
@@ -88,6 +175,7 @@ func OnSignal(mc *conx.Controller) mqtt.MessageHandler {
 func OnHealthcheck(mc *conx.Controller) mqtt.MessageHandler {
 	return func(client mqtt.Client, msg mqtt.Message) {
 		messageString := string(msg.Payload())
+		log.Println(messageString)
 		if messageString == "ok" {
 			mc.MicrocontrollerAlive = true
 		}

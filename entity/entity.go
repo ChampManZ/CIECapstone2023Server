@@ -2,9 +2,12 @@ package entity
 
 // API
 type AnnounceAPIPayload struct {
-	Session string `json:"session"`
-	Faculty string `json:"faculty"`
-	Blocks  Blocks `json:"blocks"`
+	Session       string              `json:"session"`
+	Faculty       string              `json:"faculty"`
+	CurrentNumber int                 `json:"current_number"`
+	MaxNumber     int                 `json:"max_number"`
+	Mode          string              `json:"mode"`
+	Blocks        []IndividualPayload `json:"blocks"`
 }
 
 type Blocks struct {
@@ -16,9 +19,13 @@ type Blocks struct {
 
 // MQTT
 type AnnounceMQTTPayload struct {
-	Session string            `json:"session"`
-	Faculty string            `json:"faculty"`
-	Block   IndividualPayload `json:"block"`
+	Session       string            `json:"session"`
+	Faculty       string            `json:"faculty"`
+	CurrentNumber int               `json:"current_number"`
+	MaxNumber     int               `json:"max_number"`
+	Mode          string            `json:"mode"`
+	Revert        bool              `json:"revert"`
+	Block         IndividualPayload `json:"block"`
 }
 
 type CounterPayload struct {
@@ -39,6 +46,8 @@ type StudentPayload struct {
 	Faculty        string `json:"-"`
 	Session        string `json:"-"`
 	Certificate    string `json:"cert"`
+	Order          int    `json:"-"`
+	FacultyMax     int    `json:"-"`
 }
 
 type Student struct {
