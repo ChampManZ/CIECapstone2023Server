@@ -386,6 +386,8 @@ func (hl handlers) SwitchMode(e echo.Context) error {
 	} else {
 		hl.Controller.Mode = "auto"
 	}
+
+	hl.Controller.ModeChangeSig <- hl.Controller.Mode
 	return e.JSON(http.StatusOK, hl.Controller.Mode)
 }
 

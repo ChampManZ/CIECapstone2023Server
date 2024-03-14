@@ -23,7 +23,7 @@ type Controller struct {
 	Mode                 string
 	AutoSpeed            int
 	SpeedChangeSig       chan int
-	modeChangeSig        chan string
+	ModeChangeSig        chan string
 	stop                 chan struct{}
 	Lock                 sync.Mutex
 }
@@ -35,7 +35,7 @@ func NewController() Controller {
 		StudentList:          make(map[int]entity.Student),
 		AnnouncerList:        make(map[int]entity.Announcer),
 		Mode:                 "sensor",
-		modeChangeSig:        make(chan string),
+		ModeChangeSig:        make(chan string),
 		SpeedChangeSig:       make(chan int, 1),
 		stop:                 make(chan struct{}),
 		AutoSpeed:            25,
@@ -271,7 +271,7 @@ func (c *Controller) PublishMQTT() {
 
 	for {
 		select {
-		case mode := <-c.modeChangeSig:
+		case mode := <-c.ModeChangeSig:
 			// Mode change handling remains the same
 			if mode == "auto" && ticker == nil {
 				// Initialize the ticker with the current AutoSpeed
