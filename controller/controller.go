@@ -26,6 +26,7 @@ type Controller struct {
 	ModeChangeSig        chan string
 	stop                 chan struct{}
 	Lock                 sync.Mutex
+	PausePublish         chan bool
 }
 
 func NewController() Controller {
@@ -275,10 +276,7 @@ func (c *Controller) PublishMQTT() {
 			// Mode change handling remains the same
 			if mode == "auto" && ticker == nil {
 				// Initialize the ticker with the current AutoSpeed
-				c.Lock.Lock()
 				interval := time.Minute / time.Duration(c.AutoSpeed)
-				c.Lock.Unlock()
-
 				ticker = time.NewTicker(interval)
 				tickerC = ticker.C
 			} else if mode != "auto" && ticker != nil {
@@ -287,8 +285,14 @@ func (c *Controller) PublishMQTT() {
 				tickerC = nil
 			}
 		case <-tickerC:
+			c.Lock.Lock()
+			if c.GlobalCounter > len(c.Script) {
+				c.Lock.Unlock()
+				continue // Skip this tick
+			}
+
 			// Perform MQTT publishing
-			c.MqttClient.Publish("signal", 0, false, "1")
+			c.MqttClient.Publish("signal", 2, false, "1")
 		case newSpeed := <-c.SpeedChangeSig:
 			// Handle speed change
 			if ticker != nil {
@@ -297,6 +301,14 @@ func (c *Controller) PublishMQTT() {
 				ticker = time.NewTicker(interval)
 				tickerC = ticker.C
 			}
+		case pause := <-c.PausePublish:
+			if pause {
+				ticker.Stop()
+			} else {
+				interval := time.Minute / time.Duration(c.AutoSpeed)
+				ticker.Reset(interval) // Reset or recreate ticker to resume
+			}
+
 		case <-c.stop:
 			if ticker != nil {
 				ticker.Stop()

@@ -377,15 +377,14 @@ func (hl handlers) DecrementCounter(e echo.Context) error {
 }
 
 func (hl handlers) SwitchMode(e echo.Context) error {
-	hl.Controller.Lock.Lock()
-	defer hl.Controller.Lock.Unlock()
-
 	mode := hl.Controller.Mode
+	hl.Controller.Lock.Lock()
 	if mode == "auto" {
 		hl.Controller.Mode = "sensor"
 	} else {
 		hl.Controller.Mode = "auto"
 	}
+	hl.Controller.Lock.Unlock()
 
 	hl.Controller.ModeChangeSig <- hl.Controller.Mode
 	return e.JSON(http.StatusOK, hl.Controller.Mode)

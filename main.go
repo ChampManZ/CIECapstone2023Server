@@ -56,6 +56,7 @@ func main() {
 	hl.RegisterRoutes(hl.Echo)
 
 	// Start server
+	go hl.Controller.PublishMQTT()
 	go func() {
 		if err := hl.Echo.Start(":8443"); err != nil && err != http.ErrServerClosed {
 			hl.Echo.Logger.Fatal("Shutting down the server")

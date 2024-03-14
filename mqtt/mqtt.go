@@ -160,6 +160,12 @@ func OnSignal(mc *conx.Controller) mqtt.MessageHandler {
 				}
 			}
 
+			if mc.GlobalCounter > len(mc.Script) {
+				mc.PausePublish <- true
+			} else {
+				mc.PausePublish <- false
+			}
+
 			payload.Mode = mc.Mode
 
 			jsonData, err := json.Marshal(payload)
