@@ -3,7 +3,9 @@ package conx
 import (
 	"capstone/server/entity"
 	"capstone/server/utility"
+	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -20,13 +22,16 @@ type Controller struct {
 	MySQLConn            *utility.MySQLDB
 	MqttClient           mqtt.Client
 	Script               []entity.IndividualPayload
+	CurrentStudent       *entity.StudentPayload
+	NextStudent          *entity.StudentPayload
 	Mode                 string
 	AutoSpeed            int
 	SpeedChangeSig       chan int
 	ModeChangeSig        chan string
 	stop                 chan struct{}
 	Lock                 sync.Mutex
-	PausePublish         chan bool
+	pauseChanToggle      chan struct{}
+	Paused               bool
 }
 
 func NewController() Controller {
@@ -40,7 +45,14 @@ func NewController() Controller {
 		SpeedChangeSig:       make(chan int, 1),
 		stop:                 make(chan struct{}),
 		AutoSpeed:            25,
+		CurrentStudent:       nil,
+		pauseChanToggle:      make(chan struct{}),
+		Paused:               true,
 	}
+}
+
+func (c *Controller) TogglePause() {
+	c.pauseChanToggle <- struct{}{}
 }
 
 func (c *Controller) IncrementGlobalCounter() int {
@@ -92,6 +104,7 @@ func (c *Controller) GenerateSript() error {
 	var previousStudent entity.Student
 	//payloads = append(payloads, entity.IndividualPayload{})
 	//loop through sorted list and construct script
+	var counters int = 1
 	for i, student := range sortedStudents {
 		facultyOrderCount[student.Faculty]++
 		var announcerID int = 0
@@ -140,7 +153,9 @@ func (c *Controller) GenerateSript() error {
 					Faculty:     student.Faculty,
 					Session:     session,
 				},
+				BlockID: counters,
 			})
+			counters++
 		}
 		payloads = append(payloads, entity.IndividualPayload{
 			Type: "student name",
@@ -154,8 +169,12 @@ func (c *Controller) GenerateSript() error {
 				Session:        session,
 				Order:          order,
 				FacultyMax:     max,
+				Major:          student.Major,
+				StudentID:      student.StudentID,
 			},
+			BlockID: counters,
 		})
+		counters++
 		previousStudent = student
 	}
 	//payloads = append(payloads, entity.IndividualPayload{})
@@ -266,6 +285,25 @@ func (c *Controller) OrderToCounter(orderOfReceive int, faculty string) (int, er
 	return counter, nil
 }
 
+func (c *Controller) AdjustAutoSpeed(speed int) error {
+	if speed < 0 {
+		return errors.New("speed cannot be negative")
+	}
+
+	c.Lock.Lock()
+	c.AutoSpeed = speed
+	c.Lock.Unlock()
+
+	select {
+	case c.SpeedChangeSig <- speed:
+		// Speed update signal sent successfully
+	default:
+		// Prevent chan block if signal sent is in progress
+	}
+
+	return nil
+}
+
 func (c *Controller) PublishMQTT() {
 	var ticker *time.Ticker
 	var tickerC <-chan time.Time
@@ -285,12 +323,6 @@ func (c *Controller) PublishMQTT() {
 				tickerC = nil
 			}
 		case <-tickerC:
-			c.Lock.Lock()
-			if c.GlobalCounter > len(c.Script) {
-				c.Lock.Unlock()
-				continue // Skip this tick
-			}
-
 			// Perform MQTT publishing
 			c.MqttClient.Publish("signal", 2, false, "1")
 		case newSpeed := <-c.SpeedChangeSig:
@@ -301,13 +333,30 @@ func (c *Controller) PublishMQTT() {
 				ticker = time.NewTicker(interval)
 				tickerC = ticker.C
 			}
-		case pause := <-c.PausePublish:
-			if pause {
-				ticker.Stop()
+		case <-c.pauseChanToggle:
+			c.Lock.Lock()
+			c.Paused = !c.Paused
+			if c.Paused {
+				if ticker != nil {
+					log.Println("Publishing paused.")
+					ticker.Stop()
+					ticker = nil
+					tickerC = nil
+				}
 			} else {
-				interval := time.Minute / time.Duration(c.AutoSpeed)
-				ticker.Reset(interval) // Reset or recreate ticker to resume
+				log.Println("Publishing resumed.")
+				if c.Mode == "auto" && ticker == nil {
+					interval := time.Minute / time.Duration(c.AutoSpeed)
+					ticker = time.NewTicker(interval)
+					tickerC = ticker.C
+				} else if c.Mode != "auto" && ticker != nil {
+					ticker.Stop()
+					ticker = nil
+					tickerC = nil
+				}
+
 			}
+			c.Lock.Unlock()
 
 		case <-c.stop:
 			if ticker != nil {
@@ -317,4 +366,99 @@ func (c *Controller) PublishMQTT() {
 		}
 	}
 
+}
+
+func (c *Controller) GetRemainingStudents() int {
+	remainingStudents := 0
+	for _, payload := range c.Script[c.GlobalCounter:] {
+		if payload.Type == "student name" {
+			remainingStudents++
+		}
+	}
+	return remainingStudents
+}
+
+func (c *Controller) PrepareDashboardResponse(currentStudent, nextStudent *entity.StudentPayload) entity.DashboardPayload {
+	var name, faculty, major, nextStudentName string
+	var studentID, currentOrderOfReading, nextStudentOrderOfReading, remaining int
+
+	if currentStudent != nil {
+		name = currentStudent.Name
+		studentID = currentStudent.StudentID
+		faculty = currentStudent.Faculty
+		major = currentStudent.Major
+		currentOrderOfReading = currentStudent.OrderOfReading
+		remaining = c.GetRemainingStudents()
+	}
+	if nextStudent != nil {
+		nextStudentName = nextStudent.Name
+		nextStudentOrderOfReading = nextStudent.OrderOfReading
+	}
+
+	return entity.DashboardPayload{
+		Name:                      name,
+		StudentID:                 studentID,
+		Faculty:                   faculty,
+		Major:                     strings.TrimSpace(major),
+		NextStudentName:           nextStudentName,
+		CurrentOrderOfReading:     currentOrderOfReading,
+		NextStudentOrderOfReading: nextStudentOrderOfReading,
+		Remaining:                 remaining,
+		Mode:                      c.Mode,
+		Speed:                     c.AutoSpeed,
+	}
+}
+
+func (c *Controller) PrepareDashboardMQTT() entity.DashboardPayload {
+	var currentStudent, nextStudent *entity.StudentPayload // Use pointers to handle nil values
+	var found bool
+	if c.Script[c.GlobalCounter].Type == "script" {
+		response := c.PrepareDashboardResponse(c.CurrentStudent, c.NextStudent)
+		return response
+	}
+	for _, payload := range c.Script[c.GlobalCounter:] {
+		if payload.Type == "student name" {
+			studentData, ok := payload.Data.(entity.StudentPayload)
+			if !ok {
+				continue // Skip if the type assertion fails
+			}
+			if currentStudent == nil {
+				currentStudent = &studentData
+				found = true
+			} else if found {
+				nextStudent = &studentData
+				break
+			}
+		}
+	}
+	response := c.PrepareDashboardResponse(currentStudent, nextStudent)
+	log.Println("Current student:", response)
+	log.Println("Current script:", c.Script[c.GlobalCounter])
+	c.CurrentStudent = currentStudent
+	c.NextStudent = nextStudent
+	return response
+}
+
+func (c *Controller) GetFirstStudentSet() {
+	var currStudent, nextStudent entity.StudentPayload
+	var found bool
+	for _, payload := range c.Script {
+
+		if payload.Type != "student name" {
+			continue
+		}
+
+		if !found {
+			currStudent = payload.Data.(entity.StudentPayload)
+			found = true
+			continue
+		}
+		if found {
+			nextStudent = payload.Data.(entity.StudentPayload)
+			break
+		}
+
+	}
+	c.CurrentStudent = &currStudent
+	c.NextStudent = &nextStudent
 }

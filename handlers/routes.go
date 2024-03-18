@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -41,6 +40,7 @@ func (hl handlers) AnnounceAPI(e echo.Context) error {
 	currPayload := entity.IndividualPayload{}
 	nextPayload := entity.IndividualPayload{}
 	next2Payload := entity.IndividualPayload{}
+	next3Payload := entity.IndividualPayload{}
 	index := hl.Controller.GlobalCounter
 
 	script := hl.Controller.Script
@@ -62,6 +62,14 @@ func (hl handlers) AnnounceAPI(e echo.Context) error {
 		next2Payload = script[index+2]
 	}
 
+	if index+2 >= 0 && index+2 < len(script) {
+		next2Payload = script[index+2]
+	}
+
+	if index+3 >= 0 && index+3 < len(script) {
+		next3Payload = script[index+3]
+	}
+
 	if currPayload.Type == "student name" {
 		response.Faculty = currPayload.Data.(entity.StudentPayload).Faculty
 		response.Session = currPayload.Data.(entity.StudentPayload).Session
@@ -70,6 +78,13 @@ func (hl handlers) AnnounceAPI(e echo.Context) error {
 	} else if currPayload.Type == "script" {
 		response.Faculty = currPayload.Data.(entity.AnnouncerPayload).Faculty
 		response.Session = currPayload.Data.(entity.AnnouncerPayload).Session
+		for _, payload := range script[index:] {
+			if payload.Type == "student name" {
+				response.CurrentNumber = payload.Data.(entity.StudentPayload).Order
+				response.MaxNumber = payload.Data.(entity.StudentPayload).FacultyMax
+				break
+			}
+		}
 	}
 
 	response.Mode = hl.Controller.Mode
@@ -78,7 +93,11 @@ func (hl handlers) AnnounceAPI(e echo.Context) error {
 		response.Blocks = append(response.Blocks, script[0:index-1]...)
 	}
 
-	response.Blocks = append(response.Blocks, []entity.IndividualPayload{prevPayload, currPayload, nextPayload, next2Payload}...)
+	response.Blocks = append(response.Blocks, []entity.IndividualPayload{prevPayload, currPayload, nextPayload, next2Payload, next3Payload}...)
+
+	for i := range response.Blocks {
+		response.Blocks[i].BlockID = i
+	}
 
 	return e.JSON(200, response)
 }
@@ -329,32 +348,12 @@ func (hl handlers) DeleteAnnouncer(e echo.Context) error {
 }
 
 func (hl handlers) DashboardAPI(e echo.Context) error {
-	student, ok := hl.Controller.StudentList[hl.Controller.GlobalCounter]
-	if !ok {
-		payload := entity.DashboardPayload{}
-		return e.JSON(http.StatusOK, payload)
-	}
-	Name := fmt.Sprintf(student.FirstName + " " + student.LastName)
-	nextStudent := hl.Controller.StudentList[hl.Controller.GlobalCounter+10000]
-	NextName := fmt.Sprintf(nextStudent.FirstName + " " + nextStudent.LastName)
-	payload := entity.DashboardPayload{
-		Name:            Name,
-		StudentID:       student.StudentID,
-		Faculty:         student.Faculty,
-		Major:           student.Major,
-		NextStudentName: strings.TrimSpace(NextName),
-		Counter:         hl.Controller.GlobalCounter,
-		Remaining:       len(hl.Controller.StudentList) - hl.Controller.GlobalCounter,
-	}
-
-	return e.JSON(http.StatusOK, payload)
+	response := hl.Controller.PrepareDashboardMQTT()
+	return e.JSON(http.StatusOK, response)
 }
 
 func (hl handlers) IncrementCounter(e echo.Context) error {
 	flag := e.QueryParam("client")
-	if hl.Controller.Mode != "sensor" {
-		return e.JSON(http.StatusBadRequest, "Current Mode is not sensor")
-	}
 	if flag == "false" && hl.Controller.Script[hl.Controller.GlobalCounter].Type == "script" {
 		hl.Controller.MqttClient.Publish("signal", 2, false, "3")
 		return e.JSON(http.StatusOK, "OK")
@@ -365,9 +364,6 @@ func (hl handlers) IncrementCounter(e echo.Context) error {
 }
 
 func (hl handlers) DecrementCounter(e echo.Context) error {
-	if hl.Controller.Mode != "sensor" {
-		return e.JSON(http.StatusBadRequest, "Current Mode is not sensor")
-	}
 	if hl.Controller.GlobalCounter <= 0 {
 		return e.JSON(http.StatusBadRequest, "Counter cannot be less than zero")
 	}
@@ -377,17 +373,42 @@ func (hl handlers) DecrementCounter(e echo.Context) error {
 }
 
 func (hl handlers) SwitchMode(e echo.Context) error {
-	mode := hl.Controller.Mode
+	modeParam := e.QueryParam("mode")
+	speedParam := e.QueryParam("speed")
+
+	if modeParam != "auto" && modeParam != "sensor" {
+		return e.JSON(http.StatusBadRequest, "Invalid mode parameter")
+	}
 	hl.Controller.Lock.Lock()
-	if mode == "auto" {
-		hl.Controller.Mode = "sensor"
-	} else {
+	switch modeParam {
+	case "auto":
 		hl.Controller.Mode = "auto"
+	case "sensor":
+		hl.Controller.Mode = "sensor"
 	}
 	hl.Controller.Lock.Unlock()
 
 	hl.Controller.ModeChangeSig <- hl.Controller.Mode
-	return e.JSON(http.StatusOK, hl.Controller.Mode)
+	if speedParam != "" {
+		speed, err := strconv.Atoi(speedParam)
+		if err != nil {
+			return e.JSON(http.StatusBadRequest, "Invalid speed parameter")
+		}
+		if speed < 0 {
+			return e.JSON(http.StatusBadRequest, "Speed cannot be less than zero")
+		}
+		err = hl.Controller.AdjustAutoSpeed(speed)
+		if err != nil {
+			return e.JSON(http.StatusInternalServerError, err.Error())
+		}
+	}
+
+	data := entity.ModeData{
+		Mode:      hl.Controller.Mode,
+		AutoSpeed: hl.Controller.AutoSpeed,
+	}
+
+	return e.JSON(http.StatusOK, data)
 }
 
 // api to convert order of reading to counter of script
@@ -516,9 +537,55 @@ func (hl handlers) GetCounter(e echo.Context) error {
 }
 
 func (hl handlers) ResetCounter(e echo.Context) error {
+	sessionParam := e.QueryParam("session")
+	var Index int
+	if sessionParam == "" {
+		return e.JSON(http.StatusBadRequest, "Session parameter not found")
+	}
+
+	if sessionParam == "morning" {
+		Index = 0
+	} else if sessionParam == "afternoon" {
+		Index = 0 // Default to 0 if not found
+		for i, payload := range hl.Controller.Script {
+			if payload.Type == "student name" {
+				// Assuming Data is of type StudentPayload and has a Session field
+				studentData, ok := payload.Data.(entity.StudentPayload)
+				if ok && studentData.Session == "เช้า" {
+					Index = i + 1
+				}
+			}
+		}
+	}
+
+	//set current and next student
+	var currStudent, nextStudent entity.StudentPayload
+	var found bool
+	for _, payload := range hl.Controller.Script[Index:] {
+
+		if payload.Type != "student name" {
+			continue
+		}
+
+		if !found {
+			currStudent = payload.Data.(entity.StudentPayload)
+			found = true
+			continue
+		}
+		if found {
+			nextStudent = payload.Data.(entity.StudentPayload)
+			break
+		}
+
+	}
+
+	hl.Controller.CurrentStudent = &currStudent
+	hl.Controller.NextStudent = &nextStudent
+
 	hl.Controller.Lock.Lock()
 	defer hl.Controller.Lock.Unlock()
-	hl.Controller.GlobalCounter = 0
+	hl.Controller.GlobalCounter = Index
+	hl.Controller.MqttClient.Publish("signal", 2, false, "4")
 	return e.JSON(http.StatusOK, "OK")
 }
 
@@ -551,6 +618,23 @@ func (hl handlers) AdjustAutoSpeed(e echo.Context) error {
 
 }
 
+func (hl handlers) SetCounter(e echo.Context) error {
+	CounterParam := e.QueryParam("counter")
+	if CounterParam == "" {
+		return e.JSON(http.StatusBadRequest, "Counter parameter not found")
+	}
+
+	Counter, err := strconv.Atoi(CounterParam)
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, "Invalid counter parameter")
+	}
+
+	hl.Controller.Lock.Lock()
+	defer hl.Controller.Lock.Unlock()
+	hl.Controller.GlobalCounter = Counter
+	return e.JSON(http.StatusOK, Counter)
+}
+
 func (hl handlers) RegisterRoutes(e *echo.Echo) {
 	// utility
 	e.GET("/healthcheck", hl.Healthcheck)
@@ -569,6 +653,7 @@ func (hl handlers) RegisterRoutes(e *echo.Echo) {
 	e.GET("/api/resetCounter", hl.ResetCounter)
 	e.GET("/api/counter", hl.CounterAPI)
 	e.GET("/api/autoSpeed", hl.AdjustAutoSpeed)
+	e.GET("/api/setCounter", hl.SetCounter)
 
 	// files and pages
 	e.GET("/*", hl.Mainpage)

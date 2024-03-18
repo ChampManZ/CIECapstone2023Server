@@ -24,7 +24,7 @@ type AnnounceMQTTPayload struct {
 	CurrentNumber int               `json:"current_number"`
 	MaxNumber     int               `json:"max_number"`
 	Mode          string            `json:"mode"`
-	Revert        bool              `json:"revert"`
+	Action        string            `json:"action"`
 	Block         IndividualPayload `json:"block"`
 }
 
@@ -34,8 +34,9 @@ type CounterPayload struct {
 }
 
 type IndividualPayload struct {
-	Type string      `json:"type"`
-	Data interface{} `json:"data"`
+	Type    string      `json:"type"`
+	Data    interface{} `json:"data"`
+	BlockID int         `json:"block_id"`
 }
 
 type StudentPayload struct {
@@ -48,6 +49,8 @@ type StudentPayload struct {
 	Certificate    string `json:"cert"`
 	Order          int    `json:"-"`
 	FacultyMax     int    `json:"-"`
+	Major          string `json:"-"`
+	StudentID      int    `json:"-"`
 }
 
 type Student struct {
@@ -99,13 +102,16 @@ type FacultySession struct {
 }
 
 type DashboardPayload struct {
-	Name            string `json:"name"`
-	StudentID       int    `json:"studentID"`
-	Faculty         string `json:"faculty"`
-	Major           string `json:"major"`
-	Counter         int    `json:"order"`
-	Remaining       int    `json:"remain"`
-	NextStudentName string `json:"nextName"`
+	Name                      string `json:"name"`
+	StudentID                 int    `json:"studentID"`
+	Faculty                   string `json:"faculty"`
+	Major                     string `json:"major"`
+	NextStudentName           string `json:"nextStudentName"`
+	CurrentOrderOfReading     int    `json:"currentOrderOfReading"`
+	NextStudentOrderOfReading int    `json:"nextStudentOrderOfReading"`
+	Remaining                 int    `json:"remaining"`
+	Mode                      string `json:"mode"`
+	Speed                     int    `json:"speed"`
 }
 
 type FacultySessionPayload struct {
@@ -122,3 +128,8 @@ type AnnouncerGroupByFaculty struct {
 }
 
 type AnnouncerGroupByFacultyPayload map[string][]AnnouncerGroupByFaculty
+
+type ModeData struct {
+	Mode      string `json:"mode"`
+	AutoSpeed int    `json:"auto_speed"`
+}

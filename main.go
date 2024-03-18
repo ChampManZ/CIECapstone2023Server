@@ -50,6 +50,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	MainController.GetFirstStudentSet()
 
 	//init echo
 	hl := handlers.NewHandlers(&MainController)
