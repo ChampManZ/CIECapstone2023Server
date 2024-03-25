@@ -9,7 +9,8 @@ import (
 
 func CheckMicrocontrollerHealth(client mqtt.Client, responseReceived *bool) {
 	timeout := time.After(10 * time.Second)
-	tick := time.Tick(1 * time.Second)
+	ticker := time.NewTicker(1 * time.Second) //fix mem leak lol
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -18,7 +19,7 @@ func CheckMicrocontrollerHealth(client mqtt.Client, responseReceived *bool) {
 				log.Fatalf("Cannot connect to Microcontroller")
 			}
 			return
-		case <-tick:
+		case <-ticker.C:
 			if *responseReceived {
 				log.Println("Microcontroller is online")
 				return

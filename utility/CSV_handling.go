@@ -55,7 +55,7 @@ func JoinCSVs(file1, file2 string) (map[int]entity.Student, error) {
 				FirstName:   values[0],
 				LastName:    values[1],
 				Certificate: values[2],
-				Notes:       strings.Join(notes, ", "),
+				Reading:     strings.Join(notes, ", "),
 			}
 		}
 	}
@@ -92,7 +92,7 @@ func SaveToCSV(students map[int]entity.Student, filePath string) error {
 			student.FirstName,
 			student.LastName,
 			student.Certificate,
-			student.Notes,
+			student.Reading,
 		}
 		if err := writer.Write(record); err != nil {
 			return err
@@ -118,7 +118,7 @@ func UpdateStudentField(students map[int]entity.Student, studentID int, field, n
 	case "Certificate":
 		student.Certificate = newValue
 	case "Notes":
-		student.Notes = newValue
+		student.Reading = newValue
 	default:
 		return fmt.Errorf("invalid field: %s", field)
 	}
@@ -162,7 +162,7 @@ func ReadCSVIntoMap(filePath string, studentsMap *map[int]entity.Student) error 
 			FirstName:   record[1],
 			LastName:    record[2],
 			Certificate: record[3],
-			Notes:       record[4],
+			Reading:     record[4],
 		}
 	}
 

@@ -3,12 +3,10 @@ package mqttx
 import (
 	conx "capstone/server/controller"
 	"capstone/server/entity"
-	"capstone/server/utility"
 	"capstone/server/utility/config"
 	"encoding/json"
 	"fmt"
 	"log"
-	"strconv"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
@@ -16,7 +14,7 @@ import (
 func NewMqttx(conf *config.Config) mqtt.Client {
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(fmt.Sprintf("tls://%s:%d", conf.MQTT_server, conf.MQTT_port))
-	opts.SetClientID("go-mqtt-client")
+	opts.SetClientID("go-mqtt-clientx")
 	opts.SetUsername(conf.MQTT_username)
 	opts.SetPassword(conf.MQTT_password)
 	opts.SetDefaultPublishHandler(messagePubHandler)
@@ -41,61 +39,184 @@ var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err
 	fmt.Printf("Connection lost: %v", err)
 }
 
-func OnSignal(mc conx.Controller) mqtt.MessageHandler {
+func OnSignal(mc *conx.Controller) mqtt.MessageHandler {
 	return func(client mqtt.Client, msg mqtt.Message) {
 		messageString := string(msg.Payload())
 		log.Printf("Received message: %s from topic: %s\n", messageString, msg.Topic())
+		//Normal case (Forward)
 		if messageString == "1" {
 			mc.IncrementGlobalCounter()
 			log.Printf("Counter: %d", mc.GlobalCounter)
-			var previous, current, next *entity.Student = nil, nil, nil
-			var prevPayload, currPayload, nextPayload *entity.IndividualPayload = nil, nil, nil
-			if prevStudent, ok := mc.GetStudentByCounter(mc.GlobalCounter - 1); ok {
-				previous = prevStudent
-				prevPayload = &entity.IndividualPayload{
-					Type: "student name",
-					Data: entity.StudentPayload{
-						OrderOfReading: mc.GlobalCounter - 1,
-						Name:           previous.FirstName + " " + previous.LastName,
-						Reading:        previous.Notes,
-						Certificate:    previous.Certificate,
-					},
-				}
-				log.Printf("Previous: %+v", previous)
+			payload := entity.AnnounceMQTTPayload{}
+			var data entity.IndividualPayload
+			index := mc.GlobalCounter + 3
+			if index >= 0 && index < len(mc.Script) {
+				data = mc.Script[index]
 			}
 
-			if currentStudent, ok := mc.GetStudentByCounter(mc.GlobalCounter); ok {
-				current = currentStudent
-				currPayload = &entity.IndividualPayload{
-					Type: "student name",
-					Data: entity.StudentPayload{
-						OrderOfReading: mc.GlobalCounter,
-						Name:           current.FirstName + " " + current.LastName,
-						Reading:        current.Notes,
-						Certificate:    current.Certificate,
-					},
+			if data.Type == "student name" {
+				payload = entity.AnnounceMQTTPayload{
+					Action:  "increase",
+					Session: data.Data.(entity.StudentPayload).Session,
+					Faculty: data.Data.(entity.StudentPayload).Faculty,
 				}
-				log.Printf("Current: %+v", current)
+			} else if data.Type == "script" {
+				payload = entity.AnnounceMQTTPayload{
+					Action:  "increase",
+					Session: data.Data.(entity.AnnouncerPayload).Session,
+					Faculty: data.Data.(entity.AnnouncerPayload).Faculty,
+				}
 			}
 
-			if nextStudent, ok := mc.GetStudentByCounter(mc.GlobalCounter + 1); ok {
-				next = nextStudent
-				nextPayload = &entity.IndividualPayload{
-					Type: "student name",
-					Data: entity.StudentPayload{
-						OrderOfReading: mc.GlobalCounter + 1,
-						Name:           next.FirstName + " " + next.LastName,
-						Reading:        next.Notes,
-						Certificate:    next.Certificate,
-					},
+			for _, v := range mc.Script[mc.GlobalCounter:] {
+				if v.Type == "student name" {
+					payload.CurrentNumber = v.Data.(entity.StudentPayload).Order
+					payload.MaxNumber = v.Data.(entity.StudentPayload).FacultyMax
+					break
 				}
-				log.Printf("Next: %+v", next)
+				log.Printf("Script Data: %v", payload.Block.Data)
 			}
 
-			payload := entity.AnnouncePayload{
-				Previous: prevPayload,
-				Current:  currPayload,
-				Next:     nextPayload,
+			payload.Mode = mc.Mode
+
+			log.Printf("Payload: %v", payload)
+
+			jsonData, err := json.Marshal(payload)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			response := mc.PrepareDashboardMQTT()
+			jsonData2, err := json.Marshal(response)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			client.Publish("announce", 2, false, jsonData)
+			client.Publish("dashboard", 2, false, jsonData2)
+
+			if mc.Script[mc.GlobalCounter].Type == "script" && !mc.Paused {
+				mc.TogglePause()
+				log.Println("MQTT: pause publishing.")
+			} else if mc.Script[mc.GlobalCounter].Type == "student name" && mc.Paused {
+				mc.TogglePause()
+				log.Println("MQTT: resume publishing.")
+			}
+
+			//TODO: fail save
+			//Reverse Case
+		} else if messageString == "2" {
+			mc.DecrementGlobalCounter()
+			log.Printf("Counter: %d", mc.GlobalCounter)
+			payload := entity.AnnounceMQTTPayload{}
+			var data entity.IndividualPayload
+			index := mc.GlobalCounter + 3
+			if index >= 0 && index < len(mc.Script) {
+				data = mc.Script[index]
+			}
+
+			if data.Type == "student name" {
+				payload = entity.AnnounceMQTTPayload{
+					Action:        "decrease",
+					CurrentNumber: data.Data.(entity.StudentPayload).Order,
+					MaxNumber:     data.Data.(entity.StudentPayload).FacultyMax,
+					Session:       data.Data.(entity.StudentPayload).Session,
+					Faculty:       data.Data.(entity.StudentPayload).Faculty,
+				}
+			} else if data.Type == "script" {
+				payload = entity.AnnounceMQTTPayload{
+					Action:  "decrease",
+					Session: data.Data.(entity.AnnouncerPayload).Session,
+					Faculty: data.Data.(entity.AnnouncerPayload).Faculty,
+				}
+
+			}
+			for _, v := range mc.Script[mc.GlobalCounter:] {
+				if v.Type == "student name" {
+					payload.CurrentNumber = v.Data.(entity.StudentPayload).Order
+					payload.MaxNumber = v.Data.(entity.StudentPayload).FacultyMax
+					break
+				}
+			}
+
+			payload.Mode = mc.Mode
+
+			jsonData, err := json.Marshal(payload)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			response := mc.PrepareDashboardMQTT()
+			jsonData2, err := json.Marshal(response)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			if mc.Script[mc.GlobalCounter].Type == "script" && !mc.Paused {
+				mc.TogglePause()
+				log.Println("MQTT: pause publishing.")
+			} else if mc.Script[mc.GlobalCounter].Type == "student name" && mc.Paused {
+				mc.TogglePause()
+				log.Println("MQTT: resume publishing.")
+			}
+
+			client.Publish("announce", 2, false, jsonData)
+			client.Publish("dashboard", 2, false, jsonData2)
+			//Skip Case
+		} else if messageString == "3" {
+			mc.IncrementGlobalCounter()
+			mc.IncrementGlobalCounter()
+			log.Printf("Counter: %d", mc.GlobalCounter)
+			payload := entity.AnnounceMQTTPayload{}
+			var data entity.IndividualPayload
+			index := mc.GlobalCounter + 3
+			if index >= 0 && index < len(mc.Script) {
+				data = mc.Script[index]
+			}
+
+			if data.Type == "student name" {
+				payload = entity.AnnounceMQTTPayload{
+					Action:        "increase",
+					CurrentNumber: data.Data.(entity.StudentPayload).Order,
+					MaxNumber:     data.Data.(entity.StudentPayload).FacultyMax,
+					Session:       data.Data.(entity.StudentPayload).Session,
+					Faculty:       data.Data.(entity.StudentPayload).Faculty,
+				}
+			} else if data.Type == "script" {
+				payload = entity.AnnounceMQTTPayload{
+					Action:  "increase",
+					Session: data.Data.(entity.AnnouncerPayload).Session,
+					Faculty: data.Data.(entity.AnnouncerPayload).Faculty,
+				}
+
+			}
+			for _, v := range mc.Script[mc.GlobalCounter:] {
+				if v.Type == "student name" {
+					payload.CurrentNumber = v.Data.(entity.StudentPayload).Order
+					payload.MaxNumber = v.Data.(entity.StudentPayload).FacultyMax
+					break
+				}
+			}
+
+			payload.Mode = mc.Mode
+
+			jsonData, err := json.Marshal(payload)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			response := mc.PrepareDashboardMQTT()
+			jsonData2, err := json.Marshal(response)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			client.Publish("announce", 2, false, jsonData)
+			client.Publish("dashboard", 2, false, jsonData2)
+		} else if messageString == "4" {
+			log.Printf("Counter: %d", mc.GlobalCounter)
+			payload := entity.AnnounceMQTTPayload{
+				Action: "reset",
 			}
 
 			jsonData, err := json.Marshal(payload)
@@ -103,27 +224,30 @@ func OnSignal(mc conx.Controller) mqtt.MessageHandler {
 				log.Fatal(err)
 			}
 
-			client.Publish("announce", 0, false, jsonData)
-
-			//TODO: replace
-			err = utility.WriteStringToFile("failsave.txt", strconv.Itoa(mc.GlobalCounter))
-			if err != nil {
-				log.Fatal(err)
+			if mc.Script[mc.GlobalCounter].Type == "script" && !mc.Paused {
+				mc.TogglePause()
+				log.Println("MQTT: pause publishing.")
+			} else if mc.Script[mc.GlobalCounter].Type == "student name" && mc.Paused {
+				mc.TogglePause()
+				log.Println("MQTT: resume publishing.")
 			}
+
+			client.Publish("announce", 2, false, jsonData)
 		}
 	}
 }
 
-func OnHealthcheck(mc conx.Controller) mqtt.MessageHandler {
+func OnHealthcheck(mc *conx.Controller) mqtt.MessageHandler {
 	return func(client mqtt.Client, msg mqtt.Message) {
 		messageString := string(msg.Payload())
+		log.Println(messageString)
 		if messageString == "ok" {
 			mc.MicrocontrollerAlive = true
 		}
 	}
 }
 
-func RegisterCallBacks(c mqtt.Client, mc conx.Controller) {
+func RegisterCallBacks(c mqtt.Client, mc *conx.Controller) {
 	token := c.Subscribe("signal", 0, OnSignal(mc))
 	token.Wait()
 	token = c.Subscribe("healthcheck", 0, OnHealthcheck(mc))

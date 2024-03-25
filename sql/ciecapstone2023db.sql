@@ -3,9 +3,10 @@ USE ciecapstone2023db;
 CREATE TABLE Announcer (
     AnnouncerID INT PRIMARY KEY AUTO_INCREMENT,
     AnnouncerName VARCHAR(255),
-    AnnouncerPos VARCHAR(255),
+    AnnouncerScript VARCHAR(255),
     SessionOfAnnounce VARCHAR(255),
-    ReceivingOrder INT
+    FirstOrder INT,
+    LastOrder INT
 );
 
 CREATE TABLE Certificate (
@@ -13,21 +14,24 @@ CREATE TABLE Certificate (
     Degree VARCHAR(255),
     Faculty VARCHAR(255),
     Major VARCHAR(255),
-    Honor VARCHAR(255),
-    AnnouncerID INT,
-    FOREIGN KEY (AnnouncerID) REFERENCES Announcer(AnnouncerID)
+    Honor VARCHAR(255)
 );
 
 CREATE TABLE Student (
     StudentID INT PRIMARY KEY,
     OrderOfReceive INT,
-    CertificateOrder INT,
     Firstname VARCHAR(255),
     Surname VARCHAR(255),
     NamePronunciation VARCHAR(255),
     CertificateID INT,
-    Notes TEXT,
+    AnnouncerID INT,
+    FOREIGN KEY (AnnouncerID) REFERENCES Announcer(AnnouncerID),
     FOREIGN KEY (CertificateID) REFERENCES Certificate(CertificateID)
+);
+
+CREATE TABLE NameRead (
+    NameReadStudentID INT PRIMARY KEY,
+    SavedNameRead VARCHAR(255)
 );
 
 CREATE TABLE Counter (

@@ -9,17 +9,28 @@ def get_data():
         data = response.json()
     return data
 
-db_config = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'admin123',
-    'database': 'ciecapstone2023db'
-}
+# db_config = {
+#     'host': 'localhost',
+#     'user': 'root',
+#     'password': 'admin123',
+#     'database': 'ciecapstone2023db'
+# }
 
-db = mysql.connector.connect(**db_config)
-cursor = db.cursor()
+# db = mysql.connector.connect(**db_config)
+# cursor = db.cursor()
 
 json_data = get_data()
+def count_non_default_ceremony(data):
+    count = 0
+    for item in data:
+        if item.get("ceremony") != "0000-00-00 00:00:00":
+            count += 1
+    return count
+
+# Count and print the result
+count = count_non_default_ceremony(json_data)
+print(f"Number of entries with non-default ceremony time: {count}")
+
 
 # Load data into Database
 # for item in json_data:
@@ -52,36 +63,36 @@ json_data = get_data()
 # db.close()
 
 # Query student entries
-query = """
-    SELECT 
-        s.StudentID,
-        s.OrderOfReceive,
-        s.Firstname,
-        s.Surname,
-        s.NamePronunciation,
-        c.Degree,
-        c.Faculty,
-        c.Major,
-        c.Honor,
-        a.AnnouncerName,
-        a.AnnouncerPos,
-        a.SessionOfAnnounce
-    FROM 
-        Student s
-    JOIN 
-        Certificate c ON s.CertificateID = c.CertificateID
-    LEFT JOIN 
-        Announcer a ON c.AnnouncerID = a.AnnouncerID
-    LIMIT 100;
-"""
+# query = """
+#     SELECT 
+#         s.StudentID,
+#         s.OrderOfReceive,
+#         s.Firstname,
+#         s.Surname,
+#         s.NamePronunciation,
+#         c.Degree,
+#         c.Faculty,
+#         c.Major,
+#         c.Honor,
+#         a.AnnouncerName,
+#         a.AnnouncerPos,
+#         a.SessionOfAnnounce
+#     FROM 
+#         Student s
+#     JOIN 
+#         Certificate c ON s.CertificateID = c.CertificateID
+#     LEFT JOIN 
+#         Announcer a ON c.AnnouncerID = a.AnnouncerID
+#     LIMIT 100;
+# """
 
 # Get unique Faculty
 # query = "SELECT DISTINCT Faculty FROM Certificate;"
 
-cursor.execute(query)
-students = cursor.fetchall()
-for student in students:
-    print(student)
+# cursor.execute(query)
+# students = cursor.fetchall()
+# for student in students:
+#     print(student)
 
-cursor.close()
-db.close()
+# cursor.close()
+# db.close()

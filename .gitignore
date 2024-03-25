@@ -25,3 +25,9 @@ failsave.txt
 # Ignore Mac system files
 .DS_Store
 ../.DS_Store
+
+# html files
+/html/dist
+
+#go build files
+capstone

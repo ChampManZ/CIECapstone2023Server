@@ -21,6 +21,8 @@ func main() {
 	var MainController = conx.NewController()
 
 	client := mqttx.NewMqttx(config.GlobalConfig)
+	MainController.MqttClient = client
+	mqttx.RegisterCallBacks(client, &MainController)
 	client.Publish("healthcheck", 0, false, "CHK")
 	//utility.CheckMicrocontrollerHealth(client, &MainController.MicrocontrollerAlive)
 
@@ -39,11 +41,23 @@ func main() {
 		log.Fatal(err)
 	}
 
+	MainController.AnnouncerList, err = MainController.MySQLConn.QueryAnnouncers()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = MainController.GenerateSript()
+	if err != nil {
+		log.Fatal(err)
+	}
+	MainController.GetFirstStudentSet()
+
 	//init echo
-	hl := handlers.NewHandlers(MainController)
+	hl := handlers.NewHandlers(&MainController)
 	hl.RegisterRoutes(hl.Echo)
 
 	// Start server
+	go hl.Controller.PublishMQTT()
 	go func() {
 		if err := hl.Echo.Start(":8443"); err != nil && err != http.ErrServerClosed {
 			hl.Echo.Logger.Fatal("Shutting down the server")
