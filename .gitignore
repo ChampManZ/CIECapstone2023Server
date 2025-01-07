@@ -27,7 +27,7 @@ failsave.txt
 ../.DS_Store
 
 # html files
-/html/dist
+# /html/dist
 
 #go build files
 capstone

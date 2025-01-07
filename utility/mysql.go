@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -19,10 +20,29 @@ type MySQLDB struct {
 }
 
 func NewMySQLConn(dsn string) (*MySQLDB, error) {
-	db, err := sql.Open("mysql", dsn)
+	var db *sql.DB
+	var err error
+	for i := 0; i < 5; i++ {
+		db, err = sql.Open("mysql", dsn)
+		if err != nil {
+			log.Println("Error connecting to MySQL:", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		// Ping the database to check connection
+		err = db.Ping()
+		if err == nil {
+			break
+		}
+		log.Println("Error pinging MySQL:", err)
+		time.Sleep(2 * time.Second)
+	}
+
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("Successfully connected to MySQL!")
 	return &MySQLDB{db}, nil
 }
 
