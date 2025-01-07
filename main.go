@@ -3,6 +3,7 @@ package main
 import (
 	conx "capstone/server/controller"
 	"capstone/server/handlers"
+
 	mqttx "capstone/server/mqtt"
 	"capstone/server/utility"
 	"capstone/server/utility/config"
@@ -59,7 +60,7 @@ func main() {
 	// Start server
 	go hl.Controller.PublishMQTT()
 	go func() {
-		if err := hl.Echo.Start(":8443"); err != nil && err != http.ErrServerClosed {
+		if err := hl.Echo.Start(fmt.Sprintf(":%d", config.GlobalConfig.Server_port)); err != nil && err != http.ErrServerClosed {
 			hl.Echo.Logger.Fatal("Shutting down the server")
 		}
 	}()
@@ -75,5 +76,4 @@ func main() {
 		hl.Echo.Logger.Fatal(err)
 	}
 
-	client.Disconnect(250)
 }

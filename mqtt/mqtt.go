@@ -4,6 +4,7 @@ import (
 	conx "capstone/server/controller"
 	"capstone/server/entity"
 	"capstone/server/utility/config"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -20,6 +21,10 @@ func NewMqttx(conf *config.Config) mqtt.Client {
 	opts.SetDefaultPublishHandler(messagePubHandler)
 	opts.OnConnect = connectHandler
 	opts.OnConnectionLost = connectLostHandler
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true,
+	}
+	opts.SetTLSConfig(tlsConfig)
 	client := mqtt.NewClient(opts)
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
 		panic(token.Error())

@@ -1,0 +1,46 @@
+services:
+  mysql:
+    image: mysql:8
+    container_name: sql-db-1
+    command: --mysql-native-password=ON
+    environment:
+      MYSQL_ROOT_PASSWORD: admin123
+      MYSQL_DATABASE: ciecapstone2023db
+    ports:
+      - "3306:3306"
+    networks:
+      - ciecapstone2023Network
+    volumes:
+      - my-db:/var/lib/mysql
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    restart: always
+
+  app:
+    build:
+      context: .
+    container_name: capstoneServer
+    ports:
+      - "8443:8443"
+    networks:
+      - ciecapstone2023Network
+    depends_on:
+      - mysql
+    environment:
+      SERVER_PORT: 8443
+      MQTT_PORT: 8883
+      MQTT_SERVER: 181314a4c00344d5a62cfc8c2059208e.s1.eu.hivemq.cloud
+      MQTT_USERNAME:
+      MQTT_PASSWORD:
+      DOWNLOAD_URL: http://localhost:8080
+      MYSQL_HOST: sql-db-1
+      MYSQL_DBNAME: ciecapstone2023db
+      MYSQL_PORT: 3306
+      MYSQL_USER: root
+      MYSQL_PASSWORD: admin123
+
+volumes:
+  my-db:
+
+networks:
+  ciecapstone2023Network:
+    driver: bridge

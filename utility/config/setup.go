@@ -5,7 +5,7 @@ import (
 )
 
 type Config struct {
-	server_port    int
+	Server_port    int
 	MQTT_port      int
 	MQTT_server    string
 	MQTT_username  string
@@ -21,11 +21,9 @@ type Config struct {
 var GlobalConfig *Config
 
 func Setup() {
-	viper.SetConfigFile(".env")
-	viper.ReadInConfig()
-
+	viper.AutomaticEnv()
 	GlobalConfig = &Config{
-		server_port:    viper.GetInt("SERVER_PORT"),
+		Server_port:    viper.GetInt("SERVER_PORT"),
 		MQTT_port:      viper.GetInt("MQTT_PORT"),
 		MQTT_server:    viper.GetString("MQTT_SERVER"),
 		MQTT_username:  viper.GetString("MQTT_USERNAME"),
