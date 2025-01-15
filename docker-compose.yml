@@ -1,7 +1,7 @@
 services:
   mysql:
     image: mysql:8
-    container_name: sql-db-1
+    container_name: rollcall-db
     command: --mysql-native-password=ON
     environment:
       MYSQL_ROOT_PASSWORD: admin123
@@ -9,38 +9,43 @@ services:
     ports:
       - "3306:3306"
     networks:
-      - ciecapstone2023Network
+      - rollcall-network
     volumes:
-      - my-db:/var/lib/mysql
+      - rollcall:/var/lib/mysql
       - ./init-scripts:/docker-entrypoint-initdb.d
     restart: always
 
   app:
     build:
       context: .
-    container_name: capstoneServer
+    container_name: rollcall
     ports:
       - "8443:8443"
     networks:
-      - ciecapstone2023Network
+      - rollcall-network
     depends_on:
       - mysql
     environment:
       SERVER_PORT: 8443
       MQTT_PORT: 8883
       MQTT_SERVER: 181314a4c00344d5a62cfc8c2059208e.s1.eu.hivemq.cloud
-      MQTT_USERNAME:
-      MQTT_PASSWORD:
+      MQTT_USERNAME: "user1"
+      MQTT_PASSWORD: "P@ssw0rd"
       DOWNLOAD_URL: http://localhost:8080
-      MYSQL_HOST: sql-db-1
+      MYSQL_HOST: rollcall-db
       MYSQL_DBNAME: ciecapstone2023db
       MYSQL_PORT: 3306
       MYSQL_USER: root
       MYSQL_PASSWORD: admin123
 
 volumes:
-  my-db:
+  rollcall:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/rollcall
 
 networks:
-  ciecapstone2023Network:
+  rollcall-network:
     driver: bridge

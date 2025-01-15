@@ -27,7 +27,10 @@ failsave.txt
 ../.DS_Store
 
 # html files
-# /html/dist
+/html/dist
+
+# datafile
+KMITL-pundit-2566-CE.csv
 
 #go build files
 capstone

@@ -199,6 +199,7 @@ func constructScript(i int, student entity.Student, announcerScript string, prev
 			major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
 		}
 		announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(major))
+		certificateValue = fmt.Sprintf(certificateValue + " " + student.Honor)
 	} else {
 		degree := student.Degree
 		if utility.IsFirstCharNotEnglish(degree) {
@@ -226,7 +227,7 @@ func constructScript(i int, student entity.Student, announcerScript string, prev
 			} else {
 				certificateValue = fmt.Sprintf(certificateValue + " " + strings.TrimSpace(major))
 			}
-		}
+		} 
 
 	}
 	return announcerScript, certificateValue

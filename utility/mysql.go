@@ -36,7 +36,7 @@ func NewMySQLConn(dsn string) (*MySQLDB, error) {
 			break
 		}
 		log.Println("Error pinging MySQL:", err)
-		time.Sleep(2 * time.Second)
+		time.Sleep(5 * time.Second)
 	}
 
 	if err != nil {
