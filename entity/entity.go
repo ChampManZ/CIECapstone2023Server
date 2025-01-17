@@ -74,6 +74,7 @@ type Announcer struct {
 	Session         string `json:"SessionOfAnnounce"`
 	Start           int    `json:"FirstOrder"`
 	End             int    `json:"LastOrder"`
+	IsBreak         bool   `json:"IsBreak"`
 }
 
 type AnnouncerPayload struct {

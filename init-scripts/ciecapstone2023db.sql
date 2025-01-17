@@ -6,7 +6,8 @@ CREATE TABLE Announcer (
     AnnouncerScript VARCHAR(255),
     SessionOfAnnounce VARCHAR(255),
     FirstOrder INT,
-    LastOrder INT
+    LastOrder INT,
+    IsBreak Boolean DEFAULT false
 );
 
 CREATE TABLE Certificate (

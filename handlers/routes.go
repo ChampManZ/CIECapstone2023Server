@@ -256,7 +256,7 @@ func (hl handlers) UpdateAnnouncer(e echo.Context) error {
 	defer tx.Rollback()
 
 	for _, updateRequest := range updateRequests {
-		err = hl.Controller.MySQLConn.UpdateAnnouncerQuery(tx, updateRequest.AnnouncerID, updateRequest.AnnouncerName, updateRequest.AnnouncerScript, updateRequest.Session, updateRequest.Start, updateRequest.End)
+		err = hl.Controller.MySQLConn.UpdateAnnouncerQuery(tx, updateRequest.AnnouncerID, updateRequest.AnnouncerName, updateRequest.AnnouncerScript, updateRequest.Session, updateRequest.Start, updateRequest.End, updateRequest.IsBreak)
 		if err != nil {
 			return e.JSON(http.StatusInternalServerError, err.Error())
 		}
@@ -288,7 +288,7 @@ func (hl handlers) InsertAnnouncer(e echo.Context) error {
 	defer tx.Rollback()
 
 	for _, insertRequest := range insertRequests {
-		err = hl.Controller.MySQLConn.InsertAnnouncer(tx, insertRequest.AnnouncerName, insertRequest.AnnouncerScript, insertRequest.Session, insertRequest.Start, insertRequest.End)
+		err = hl.Controller.MySQLConn.InsertAnnouncer(tx, insertRequest.AnnouncerName, insertRequest.AnnouncerScript, insertRequest.Session, insertRequest.Start, insertRequest.End, insertRequest.IsBreak)
 		if err != nil {
 			return e.JSON(http.StatusInternalServerError, fmt.Sprintf("Failed to insert announcer: %v", err))
 		}

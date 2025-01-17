@@ -288,9 +288,9 @@ func (db *MySQLDB) QueryUniqueFaculties() ([]entity.FacultySession, error) {
 }
 
 // Transaction included
-func (db *MySQLDB) UpdateAnnouncerQuery(tx *sql.Tx, announcerID int, announcerName, announcerScript, sessionOfAnnounce string, firstOrder, lastOrder int) error {
-	query := `UPDATE Announcer SET AnnouncerName = ?, AnnouncerScript = ?, SessionOfAnnounce = ?, FirstOrder = ?, LastOrder = ? WHERE AnnouncerID = ?`
-	_, err := tx.Exec(query, announcerName, announcerScript, sessionOfAnnounce, firstOrder, lastOrder, announcerID)
+func (db *MySQLDB) UpdateAnnouncerQuery(tx *sql.Tx, announcerID int, announcerName, announcerScript, sessionOfAnnounce string, firstOrder, lastOrder int, isBreak bool) error {
+	query := `UPDATE Announcer SET AnnouncerName = ?, AnnouncerScript = ?, SessionOfAnnounce = ?, FirstOrder = ?, LastOrder = ?, IsBreak = ? WHERE AnnouncerID = ?`
+	_, err := tx.Exec(query, announcerName, announcerScript, sessionOfAnnounce, firstOrder, lastOrder, isBreak, announcerID)
 	if err != nil {
 		return fmt.Errorf("failed to update announcer: %w", err)
 	}
@@ -330,7 +330,7 @@ func (db *MySQLDB) UpdateNote(orderOfReceive int, note string) error {
 }
 
 func (db *MySQLDB) QueryAnnouncers() (map[int]entity.Announcer, error) {
-	query := `SELECT AnnouncerID, AnnouncerName, AnnouncerScript, SessionOfAnnounce, FirstOrder, LastOrder FROM Announcer`
+	query := `SELECT AnnouncerID, AnnouncerName, AnnouncerScript, SessionOfAnnounce, FirstOrder, LastOrder, IsBreak FROM Announcer`
 	rows, err := db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("querying announcers: %w", err)
@@ -341,7 +341,7 @@ func (db *MySQLDB) QueryAnnouncers() (map[int]entity.Announcer, error) {
 
 	for rows.Next() {
 		var a entity.Announcer
-		if err := rows.Scan(&a.AnnouncerID, &a.AnnouncerName, &a.AnnouncerScript, &a.Session, &a.Start, &a.End); err != nil {
+		if err := rows.Scan(&a.AnnouncerID, &a.AnnouncerName, &a.AnnouncerScript, &a.Session, &a.Start, &a.End, &a.IsBreak); err != nil {
 			return nil, fmt.Errorf("scanning announcer: %w", err)
 		}
 		announcers[a.AnnouncerID] = a
@@ -355,7 +355,7 @@ func (db *MySQLDB) QueryAnnouncers() (map[int]entity.Announcer, error) {
 }
 
 // Transaction included
-func (db *MySQLDB) InsertAnnouncer(tx *sql.Tx, announcerName, announcerScript, sessionOfAnnounce string, firstOrder, lastOrder int) error {
+func (db *MySQLDB) InsertAnnouncer(tx *sql.Tx, announcerName, announcerScript, sessionOfAnnounce string, firstOrder, lastOrder int, isBreak bool) error {
 	var first, last sql.NullInt64
 	first.Int64 = int64(firstOrder)
 	last.Int64 = int64(lastOrder)
@@ -365,8 +365,8 @@ func (db *MySQLDB) InsertAnnouncer(tx *sql.Tx, announcerName, announcerScript, s
 	if last.Int64 == 0 {
 		last.Valid = false
 	}
-	query := `INSERT INTO Announcer (AnnouncerName, AnnouncerScript, SessionOfAnnounce, FirstOrder, LastOrder) VALUES (?, ?, ?, ?, ?)`
-	_, err := tx.Exec(query, announcerName, announcerScript, sessionOfAnnounce, firstOrder, lastOrder)
+	query := `INSERT INTO Announcer (AnnouncerName, AnnouncerScript, SessionOfAnnounce, FirstOrder, LastOrder, IsBreak) VALUES (?, ?, ?, ?, ?, ?)`
+	_, err := tx.Exec(query, announcerName, announcerScript, sessionOfAnnounce, firstOrder, lastOrder, isBreak)
 	if err != nil {
 		return fmt.Errorf("failed to insert announcer: %w", err)
 	}

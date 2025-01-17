@@ -78,6 +78,7 @@ func (c *Controller) GenerateSript() error {
 	var payloads []entity.IndividualPayload
 	var seenAnnouncers []int
 	var session string = "เช้า"
+	var breakNumber int = -1
 	//get student and announcer lists
 	students := c.StudentList
 	announcers := c.AnnouncerList
@@ -134,7 +135,21 @@ func (c *Controller) GenerateSript() error {
 
 		order := facultyOrderCount[student.Faculty]
 		max := facultyMax[student.Faculty]
-
+		old_announcerScript := announcerScript
+		if old_announcerScript != "" {
+			payloads = append(payloads, entity.IndividualPayload{
+				Type: "script",
+				Data: entity.AnnouncerPayload{
+					AnnouncerID: announcerID,
+					Script:      strings.TrimSpace(announcerScript),
+					Faculty:     student.Faculty,
+					Session:     session,
+				},
+				BlockID: counters,
+			})
+			counters++
+			announcerScript = ""
+		}
 		announcerScript, certificateValue = constructScript(i, student, announcerScript, previousStudent, certificateValue)
 		// if student.Faculty != previousStudent.Faculty {
 		// 	payloads = append(payloads, entity.IndividualPayload{})
@@ -156,6 +171,9 @@ func (c *Controller) GenerateSript() error {
 				BlockID: counters,
 			})
 			counters++
+			if announcers[announcerID].IsBreak {
+				breakNumber = announcers[announcerID].End
+			}
 		}
 		payloads = append(payloads, entity.IndividualPayload{
 			Type: "student name",
@@ -175,7 +193,20 @@ func (c *Controller) GenerateSript() error {
 			BlockID: counters,
 		})
 		counters++
+		if breakNumber == student.OrderOfReceive || (breakNumber < student.OrderOfReceive && breakNumber != -1) {
+			payloads = append(payloads, entity.IndividualPayload{
+				Type: "script",
+				Data: entity.AnnouncerPayload{
+					AnnouncerID: announcerID,
+					Script:      "ด้วยเกล้าด้วยกระหม่อม",
+				},
+				BlockID: counters,
+			})
+			breakNumber = -1
+			counters++
+		}
 		previousStudent = student
+
 	}
 	//payloads = append(payloads, entity.IndividualPayload{})
 	c.Script = payloads
@@ -227,7 +258,7 @@ func constructScript(i int, student entity.Student, announcerScript string, prev
 			} else {
 				certificateValue = fmt.Sprintf(certificateValue + " " + strings.TrimSpace(major))
 			}
-		} 
+		}
 
 	}
 	return announcerScript, certificateValue
