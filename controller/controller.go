@@ -106,9 +106,9 @@ func (c *Controller) GenerateSript() error {
 	//payloads = append(payloads, entity.IndividualPayload{})
 	//loop through sorted list and construct script
 	var counters int = 1
+	var announcerID int = 0
 	for i, student := range sortedStudents {
 		facultyOrderCount[student.Faculty]++
-		var announcerID int = 0
 		var announcerScript string = ""
 		var certificateValue string = ""
 		//check announcers
@@ -125,7 +125,7 @@ func (c *Controller) GenerateSript() error {
 				continue
 			}
 
-			if student.OrderOfReceive == announcer.Start {
+			if student.OrderOfReceive >= announcer.Start && student.OrderOfReceive <= announcer.End  {
 				announcerScript = announcer.AnnouncerScript
 				seenAnnouncers = append(seenAnnouncers, announcer.AnnouncerID)
 				announcerID = announcer.AnnouncerID
@@ -199,6 +199,8 @@ func (c *Controller) GenerateSript() error {
 				Data: entity.AnnouncerPayload{
 					AnnouncerID: announcerID,
 					Script:      "ด้วยเกล้าด้วยกระหม่อม",
+					Faculty:     student.Faculty,
+					Session:     session,
 				},
 				BlockID: counters,
 			})
@@ -229,8 +231,9 @@ func constructScript(i int, student entity.Student, announcerScript string, prev
 		} else {
 			major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
 		}
-		announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(major))
-		certificateValue = fmt.Sprintf(certificateValue + " " + student.Honor)
+		announcerScript = fmt.Sprintf(announcerScript + " \n" + strings.TrimSpace(major))
+		//certificateValue = fmt.Sprintf(certificateValue + " " + student.Honor)
+		announcerScript = fmt.Sprintf(announcerScript + " \n" + student.Honor)
 	} else {
 		degree := student.Degree
 		if utility.IsFirstCharNotEnglish(degree) {
@@ -249,14 +252,24 @@ func constructScript(i int, student entity.Student, announcerScript string, prev
 			major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
 		}
 		if student.Major != previousStudent.Major {
-			announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(major))
+			announcerScript = fmt.Sprintf(announcerScript + " \n" + strings.TrimSpace(major))
 		}
 
 		if student.Honor != previousStudent.Honor {
 			if previousStudent.Honor != "เกียรตินิยมอันดับ 2" {
-				certificateValue = fmt.Sprintf(certificateValue + " " + student.Honor)
+				//certificateValue = fmt.Sprintf(certificateValue + " " + student.Honor)
+				if announcerScript != "" {
+					announcerScript = fmt.Sprintf(announcerScript + " \n" + student.Honor)
+				} else {
+					announcerScript = fmt.Sprintf(announcerScript + " " + student.Honor)
+				}
 			} else {
-				certificateValue = fmt.Sprintf(certificateValue + " " + strings.TrimSpace(major))
+				//certificateValue = fmt.Sprintf(certificateValue + " " + strings.TrimSpace(major))
+				if announcerScript != "" {
+					announcerScript = fmt.Sprintf(announcerScript + " \n" + strings.TrimSpace(major))
+				} else {
+					announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(major))
+				}
 			}
 		}
 
@@ -311,6 +324,10 @@ func (c *Controller) OrderToCounter(orderOfReceive int, faculty string) (int, er
 
 	//index previous entry to check if it is a script
 	if filtered_script[counter-1].Type == "script" {
+		counter -= 1
+	}
+
+	if counter-1 >= 0 && filtered_script[counter-1].Type == "script" {
 		counter -= 1
 	}
 

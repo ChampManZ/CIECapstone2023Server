@@ -114,6 +114,66 @@ func (hl handlers) CounterAPI(e echo.Context) error {
 	return e.JSON(200, currPayload)
 }
 
+func (hl handlers) PracticeAnnounceAPIV2(e echo.Context) error {
+	announcerIDParam := e.QueryParam("announcer")
+	var payloads []interface{}
+
+	announcerID, err := strconv.Atoi(announcerIDParam)
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, "announcer ID parameter")
+	}
+
+	var found bool
+	var filtered_script []entity.IndividualPayload
+
+	var CurrAnnouncer entity.Announcer
+
+	//find announcer
+	for _, announcer := range hl.Controller.AnnouncerList {
+		if announcer.AnnouncerID == announcerID {
+			CurrAnnouncer = announcer
+		}
+	}
+
+	//append to front
+	filtered_script = append([]entity.IndividualPayload{{}}, filtered_script...)
+	for _, payload := range hl.Controller.Script {
+		if payload.Type == "student name" {
+			if CurrAnnouncer.End >= payload.Data.(entity.StudentPayload).OrderOfReading && payload.Data.(entity.StudentPayload).OrderOfReading >= CurrAnnouncer.Start {
+				filtered_script = append(filtered_script, payload)
+				found = true
+			}
+		}
+		if payload.Type == "script" {
+			if payload.Data.(entity.AnnouncerPayload).AnnouncerID == CurrAnnouncer.AnnouncerID {
+				filtered_script = append(filtered_script, payload)
+				found = true
+			}
+		}
+		if found {
+			// if payload.Type == "student name" {
+			// 	if payload.Data.(entity.StudentPayload).OrderOfReading >= CurrAnnouncer.End {
+			// 		break
+			// 	}
+			// }
+			if payload.Type == "script" {
+				if payload.Data.(entity.AnnouncerPayload).AnnouncerID != CurrAnnouncer.AnnouncerID {
+					break
+				}
+			}
+		}
+	}
+
+	//append to back
+	filtered_script = append(filtered_script, entity.IndividualPayload{})
+
+	for _, payload := range filtered_script {
+		payloads = append(payloads, payload)
+	}
+
+	return e.JSON(http.StatusOK, payloads)
+}
+
 func (hl handlers) PracticeAnnounceAPI(e echo.Context) error {
 	startParam := e.QueryParam("start")
 	amountParam := e.QueryParam("amount")
@@ -469,6 +529,78 @@ func (hl handlers) OrderToCounter(e echo.Context) error {
 		counter -= 1
 	}
 
+	if counter-1 >= 0 && filtered_script[counter-1].Type == "script" {
+		counter -= 1
+	}
+
+	return e.JSON(http.StatusOK, counter)
+}
+
+func (hl handlers) OrderToCounterV2(e echo.Context) error {
+	orderOfReceiveParam := e.QueryParam("orderOfReceive")
+	announcerIDParam := e.QueryParam("announcer")
+	orderOfReceive, err := strconv.Atoi(orderOfReceiveParam)
+	if err != nil {
+		return e.JSON(http.StatusOK, err)
+	}
+
+	var announcerID int
+
+	announcerID, err = strconv.Atoi(announcerIDParam)
+	if err != nil {
+		return e.JSON(http.StatusBadRequest, "announcer ID parameter")
+	}
+
+	announcer := hl.Controller.AnnouncerList[announcerID]
+
+	var found bool
+	var filtered_script []entity.IndividualPayload
+	filtered_script = append(filtered_script, entity.IndividualPayload{})
+	for _, payload := range hl.Controller.Script {
+		if payload.Type == "student name" {
+			if payload.Data.(entity.StudentPayload).OrderOfReading <= announcer.End && payload.Data.(entity.StudentPayload).OrderOfReading >= announcer.Start {
+				filtered_script = append(filtered_script, payload)
+				found = true
+			}
+		}
+		if payload.Type == "script" {
+			if payload.Data.(entity.AnnouncerPayload).AnnouncerID == announcerID {
+				filtered_script = append(filtered_script, payload)
+				found = true
+			}
+		}
+		if found {
+			if payload.Type == "script" {
+				if payload.Data.(entity.AnnouncerPayload).AnnouncerID != announcerID {
+					break
+				}
+			}
+		}
+	}
+	filtered_script = append(filtered_script, entity.IndividualPayload{})
+	//use orderOfReceive to find student in filtered_script
+	counter := -1
+	for i, payload := range filtered_script {
+		if payload.Type == "student name" {
+			if payload.Data.(entity.StudentPayload).OrderOfReading == orderOfReceive {
+				counter = i
+			}
+		}
+	}
+
+	if counter == -1 {
+		return e.JSON(http.StatusBadRequest, "Student not found")
+	}
+
+	//index previous entry to check if it is a script
+	if filtered_script[counter-1].Type == "script" {
+		counter -= 1
+	}
+
+	if counter-1 >= 0 && filtered_script[counter-1].Type == "script" {
+		counter -= 1
+	}
+
 	return e.JSON(http.StatusOK, counter)
 }
 
@@ -639,12 +771,14 @@ func (hl handlers) RegisterRoutes(e *echo.Echo) {
 	// utility
 	e.GET("/healthcheck", hl.Healthcheck)
 	e.GET("/api/ord-to-count", hl.OrderToCounter)
+	e.GET("/api/v2/ord-to-count", hl.OrderToCounterV2)
 	e.GET("/api/switchMode", hl.SwitchMode)
 	e.GET("/api/dashboard", hl.DashboardAPI)
 
 	//Display
 	e.GET("/api/announce", hl.AnnounceAPI)
 	e.GET("/api/practice/announce", hl.PracticeAnnounceAPI)
+	e.GET("/api/v2/practice/announce", hl.PracticeAnnounceAPIV2)
 
 	//Counter
 	e.GET("/api/incrementCounter", hl.IncrementCounter)
