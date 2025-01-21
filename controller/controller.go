@@ -218,38 +218,58 @@ func (c *Controller) GenerateSript() error {
 func constructScript(i int, student entity.Student, announcerScript string, previousStudent entity.Student, certificateValue string) (string, string) {
 	if i == 0 {
 		degree := student.Degree
-		if utility.IsFirstCharNotEnglish(degree) {
-			degree = fmt.Sprintf("ปริญญา" + strings.TrimSpace(degree))
+		if student.OrderOfReceive >= 70000 {
+			if utility.IsFirstCharNotEnglish(degree) {
+				degree = fmt.Sprintf("คณะ" + strings.TrimSpace(degree))
+			} else {
+				degree = fmt.Sprintf("คณะ " + strings.TrimSpace(degree))
+			}
 		} else {
-			degree = fmt.Sprintf("ปริญญา " + strings.TrimSpace(degree))
+			if utility.IsFirstCharNotEnglish(degree) {
+				degree = fmt.Sprintf("ปริญญา" + strings.TrimSpace(degree))
+			} else {
+				degree = fmt.Sprintf("ปริญญา " + strings.TrimSpace(degree))
+			}
 		}
 		announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(degree))
 
 		major := student.Major
-		if utility.IsFirstCharNotEnglish(major) {
-			major = fmt.Sprintf("สาขาวิชา" + strings.TrimSpace(major))
-		} else {
-			major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
+		if major != "" {
+			if utility.IsFirstCharNotEnglish(major) {
+				major = fmt.Sprintf("สาขาวิชา" + strings.TrimSpace(major))
+			} else {
+				major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
+			}
 		}
 		announcerScript = fmt.Sprintf(announcerScript + " \n" + strings.TrimSpace(major))
 		//certificateValue = fmt.Sprintf(certificateValue + " " + student.Honor)
 		announcerScript = fmt.Sprintf(announcerScript + " \n" + student.Honor)
 	} else {
 		degree := student.Degree
-		if utility.IsFirstCharNotEnglish(degree) {
-			degree = fmt.Sprintf("ปริญญา" + strings.TrimSpace(degree))
+		if student.OrderOfReceive >= 70000 {
+			if utility.IsFirstCharNotEnglish(degree) {
+				degree = fmt.Sprintf("คณะ" + strings.TrimSpace(degree))
+			} else {
+				degree = fmt.Sprintf("คณะ " + strings.TrimSpace(degree))
+			}
 		} else {
-			degree = fmt.Sprintf("ปริญญา " + strings.TrimSpace(degree))
-		}
+			if utility.IsFirstCharNotEnglish(degree) {
+				degree = fmt.Sprintf("ปริญญา" + strings.TrimSpace(degree))
+			} else {
+				degree = fmt.Sprintf("ปริญญา " + strings.TrimSpace(degree))
+			}
+			}
 		if student.Degree != previousStudent.Degree {
 			announcerScript = fmt.Sprintf(announcerScript + " " + strings.TrimSpace(degree))
 		}
 
 		major := student.Major
-		if utility.IsFirstCharNotEnglish(major) {
-			major = fmt.Sprintf("สาขาวิชา" + strings.TrimSpace(major))
-		} else {
-			major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
+		if major != "" {
+			if utility.IsFirstCharNotEnglish(major) {
+				major = fmt.Sprintf("สาขาวิชา" + strings.TrimSpace(major))
+			} else {
+				major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
+			}
 		}
 		if student.Major != previousStudent.Major {
 			announcerScript = fmt.Sprintf(announcerScript + " \n" + strings.TrimSpace(major))
