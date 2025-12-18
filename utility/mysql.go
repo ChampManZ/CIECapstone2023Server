@@ -117,6 +117,9 @@ func (db *MySQLDB) uinsertStudent(studentID, orderOfReceive int, firstname, surn
 }
 
 func (db *MySQLDB) QueryStudentsToMap() (map[int]entity.Student, error) {
+
+	ignoredOrders := ReadIgnoredOrders("ignored_students.csv")
+	
 	query := `
 	SELECT 
 		s.StudentID,
@@ -126,8 +129,8 @@ func (db *MySQLDB) QueryStudentsToMap() (map[int]entity.Student, error) {
 		CONCAT(c.Faculty, ' ', c.Degree, 'สาขาวิชา', c.Major, ' ',
 			CASE c.Honor 
 				WHEN 0 THEN '' 
-				WHEN 1 THEN 'เกียรตินิยมอันดับ 1' 
-				WHEN 2 THEN 'เกียรตินิยมอันดับ 2' 
+				WHEN 1 THEN 'เกียรตินิยมอันดับหนึ่ง' 
+				WHEN 2 THEN 'เกียรตินิยมอันดับสอง' 
 			END) AS Certificate, 
 		COALESCE(nr.SavedNameRead, s.NamePronunciation) AS NameRead,
 		s.NamePronunciation,
@@ -136,8 +139,8 @@ func (db *MySQLDB) QueryStudentsToMap() (map[int]entity.Student, error) {
 		c.Major,
 		CASE c.Honor 
 			WHEN 0 THEN '' 
-			WHEN 1 THEN 'เกียรตินิยมอันดับ 1' 
-			WHEN 2 THEN 'เกียรตินิยมอันดับ 2' 
+			WHEN 1 THEN 'เกียรตินิยมอันดับหนึ่ง' 
+			WHEN 2 THEN 'เกียรตินิยมอันดับสอง' 
 		END AS Honor
 	FROM 
 		Student s
@@ -173,6 +176,12 @@ func (db *MySQLDB) QueryStudentsToMap() (map[int]entity.Student, error) {
 			&s.Honor); err != nil {
 			return nil, err
 		}
+
+		if ignoredOrders[s.OrderOfReceive] {
+			fmt.Printf("Skipping student with OrderOfReceive: %d\n", s.OrderOfReceive)
+			continue
+		}
+
 		major := s.Major
 		if !IsFirstCharNotEnglish(s.Major) {
 			major = fmt.Sprintf(" " + s.Major)

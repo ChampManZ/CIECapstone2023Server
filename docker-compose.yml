@@ -4,7 +4,7 @@ services:
     container_name: rollcall-db
     command: --mysql-native-password=ON
     environment:
-      MYSQL_ROOT_PASSWORD: admin123
+      MYSQL_ROOT_PASSWORD: 
       MYSQL_DATABASE: ciecapstone2023db
     ports:
       - "3306:3306"
@@ -36,15 +36,10 @@ services:
       MYSQL_DBNAME: ciecapstone2023db
       MYSQL_PORT: 3306
       MYSQL_USER: root
-      MYSQL_PASSWORD: admin123
+      MYSQL_PASSWORD: 
 
 volumes:
   rollcall:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/rollcall
 
 networks:
   rollcall-network:

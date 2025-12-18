@@ -4,6 +4,7 @@ import (
 	"capstone/server/entity"
 	"crypto/sha256"
 	"encoding/json"
+	"encoding/csv"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"reflect"
 	"unicode"
 	"unicode/utf8"
+	"strconv"
 )
 
 func CalculateChecksum(filePath string) (string, error) {
@@ -184,4 +186,41 @@ func AnnouncerAlreadyAdded(announcers []entity.AnnouncerGroupByFaculty, announce
 		}
 	}
 	return false
+}
+
+func ReadIgnoredOrders(filePath string) map[int]bool {
+	ignoredOrders := make(map[int]bool)
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		fmt.Printf("Warning: Unable to open ignore list file (%s). Proceeding without ignoring any students.\n", filePath)
+		return ignoredOrders 
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	if err != nil {
+		fmt.Printf("Warning: Unable to read ignore list file. Proceeding without ignoring any students.\n")
+		return ignoredOrders
+	}
+
+	for i, row := range records {
+		if i == 0 {
+			continue 
+		}
+		if len(row) < 2 {
+			fmt.Printf("Skipping invalid row (less than 2 columns): %v\n", row)
+			continue
+		}
+
+		orderOfReceive, err := strconv.Atoi(row[1]) // Read from column 2 (index 1)
+		if err != nil {
+			fmt.Printf("Skipping invalid OrderOfReceive value: %v\n", row[1])
+			continue
+		}
+		ignoredOrders[orderOfReceive] = true
+	}
+
+	return ignoredOrders
 }

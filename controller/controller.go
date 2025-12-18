@@ -79,6 +79,8 @@ func (c *Controller) GenerateSript() error {
 	var seenAnnouncers []int
 	var session string = "เช้า"
 	var breakNumber int = -1
+	var temp_id int
+	var temp_Faculty string
 	//get student and announcer lists
 	students := c.StudentList
 	announcers := c.AnnouncerList
@@ -135,6 +137,22 @@ func (c *Controller) GenerateSript() error {
 
 		order := facultyOrderCount[student.Faculty]
 		max := facultyMax[student.Faculty]
+		if breakNumber < student.OrderOfReceive && breakNumber != -1 {
+			payloads = append(payloads, entity.IndividualPayload{
+				Type: "script",
+				Data: entity.AnnouncerPayload{
+					AnnouncerID: temp_id,
+					Script:      "ด้วยเกล้าด้วยกระหม่อม",
+					Faculty:     temp_Faculty,
+					Session:     session,
+				},
+				BlockID: counters,
+			})
+			breakNumber = -1
+			counters++
+			temp_id = -1
+			temp_Faculty = ""
+		}
 		old_announcerScript := announcerScript
 		if old_announcerScript != "" {
 			payloads = append(payloads, entity.IndividualPayload{
@@ -173,6 +191,8 @@ func (c *Controller) GenerateSript() error {
 			counters++
 			if announcers[announcerID].IsBreak {
 				breakNumber = announcers[announcerID].End
+				temp_id = announcerID
+				temp_Faculty = student.Faculty
 			}
 		}
 		payloads = append(payloads, entity.IndividualPayload{
@@ -193,7 +213,7 @@ func (c *Controller) GenerateSript() error {
 			BlockID: counters,
 		})
 		counters++
-		if breakNumber == student.OrderOfReceive || (breakNumber < student.OrderOfReceive && breakNumber != -1) {
+		if breakNumber == student.OrderOfReceive && breakNumber != -1 {
 			payloads = append(payloads, entity.IndividualPayload{
 				Type: "script",
 				Data: entity.AnnouncerPayload{
@@ -211,6 +231,21 @@ func (c *Controller) GenerateSript() error {
 
 	}
 	//payloads = append(payloads, entity.IndividualPayload{})
+	if breakNumber != -1 {
+		payloads = append(payloads, entity.IndividualPayload{
+			Type: "script",
+			Data: entity.AnnouncerPayload{
+				AnnouncerID: temp_id,
+				Script:      "ด้วยเกล้าด้วยกระหม่อม",
+				Faculty:     temp_Faculty,
+				Session:     session,
+			},
+			BlockID: counters+1,
+		})
+		breakNumber = -1
+		temp_id = -1
+		temp_Faculty = ""
+	}
 	c.Script = payloads
 	return nil
 }
@@ -220,9 +255,9 @@ func constructScript(i int, student entity.Student, announcerScript string, prev
 		degree := student.Degree
 		if student.OrderOfReceive >= 70000 {
 			if utility.IsFirstCharNotEnglish(degree) {
-				degree = fmt.Sprintf("คณะ" + strings.TrimSpace(degree))
+				degree = fmt.Sprintf(strings.TrimSpace(degree))
 			} else {
-				degree = fmt.Sprintf("คณะ " + strings.TrimSpace(degree))
+				degree = fmt.Sprintf(strings.TrimSpace(degree))
 			}
 		} else {
 			if utility.IsFirstCharNotEnglish(degree) {
@@ -248,9 +283,9 @@ func constructScript(i int, student entity.Student, announcerScript string, prev
 		degree := student.Degree
 		if student.OrderOfReceive >= 70000 {
 			if utility.IsFirstCharNotEnglish(degree) {
-				degree = fmt.Sprintf("คณะ" + strings.TrimSpace(degree))
+				degree = fmt.Sprintf(strings.TrimSpace(degree))
 			} else {
-				degree = fmt.Sprintf("คณะ " + strings.TrimSpace(degree))
+				degree = fmt.Sprintf(strings.TrimSpace(degree))
 			}
 		} else {
 			if utility.IsFirstCharNotEnglish(degree) {
@@ -271,19 +306,19 @@ func constructScript(i int, student entity.Student, announcerScript string, prev
 				major = fmt.Sprintf("สาขาวิชา " + strings.TrimSpace(major))
 			}
 		}
-		if student.Major != previousStudent.Major {
+		if student.Major != previousStudent.Major || student.Degree != previousStudent.Degree {
 			announcerScript = fmt.Sprintf(announcerScript + " \n" + strings.TrimSpace(major))
 		}
 
 		if student.Honor != previousStudent.Honor {
-			if previousStudent.Honor != "เกียรตินิยมอันดับ 2" {
+			if student.Honor != "" {
 				//certificateValue = fmt.Sprintf(certificateValue + " " + student.Honor)
 				if announcerScript != "" {
 					announcerScript = fmt.Sprintf(announcerScript + " \n" + student.Honor)
 				} else {
 					announcerScript = fmt.Sprintf(announcerScript + " " + student.Honor)
 				}
-			} else {
+			} else if student.Honor == "" && student.Major == previousStudent.Major {
 				//certificateValue = fmt.Sprintf(certificateValue + " " + strings.TrimSpace(major))
 				if announcerScript != "" {
 					announcerScript = fmt.Sprintf(announcerScript + " \n" + strings.TrimSpace(major))

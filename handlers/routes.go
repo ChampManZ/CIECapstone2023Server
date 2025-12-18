@@ -4,7 +4,7 @@ import (
 	conx "capstone/server/controller"
 	"capstone/server/entity"
 	"capstone/server/utility"
-	"capstone/server/utility/config"
+	//"capstone/server/utility/config"
 	"fmt"
 	"net/http"
 	"sort"
@@ -284,22 +284,21 @@ func (hl handlers) GetFacultiesAPI(c echo.Context) error {
 }
 
 func (hl handlers) UpdateStudentList(e echo.Context) error {
-	studentData, err := utility.FetchRegistraData(config.GlobalConfig.Download_URL)
-	if err != nil {
-		return e.JSON(http.StatusInternalServerError, err.Error())
-	}
-	err = hl.Controller.MySQLConn.UpdateStudentList(studentData)
-	if err != nil {
-		return e.JSON(http.StatusInternalServerError, err.Error())
-	}
-
+	// studentData, err := utility.FetchRegistraData(config.GlobalConfig.Download_URL)
+	// if err != nil {
+	// 	return e.JSON(http.StatusInternalServerError, err.Error())
+	// }
+	// err = hl.Controller.MySQLConn.UpdateStudentList(studentData)
+	// if err != nil {
+	// 	return e.JSON(http.StatusInternalServerError, err.Error())
+	// }
+	var err error
 	hl.Controller.StudentList, err = hl.Controller.MySQLConn.QueryStudentsToMap()
 	if err != nil {
 		return e.JSON(http.StatusInternalServerError, err.Error())
 	}
 	hl.Controller.GenerateSript()
 	return e.JSON(http.StatusOK, "OK")
-
 }
 
 func (hl handlers) UpdateAnnouncer(e echo.Context) error {
